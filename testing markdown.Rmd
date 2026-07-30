@@ -141,52 +141,6 @@ FAGR_B3_control <- cleanData(NoNameDay4, "FAGR_B3", "controlB", "FAGR", 38, 74)
 FAGR_B3_fresh <- cleanData(PNNLDay4, "FAGR_B3", "fresh", "FAGR", 39, 76)
 FAGR_B3_salt <- cleanData(UTDay4, "FAGR_B3", "salt", "FAGR", 39, 76)
 
-
-
-
-#this was me doing it manually before :) ----
-control1 <- PNNLTest %>% #control cycle 1, found in PNNL data
-  filter(obs <= 37) %>% #includes logs 0-37. real log should also include 38!!
-  mutate(logNum = obs) %>% #adds logNum, though here it's the same as obs (I want consistent names)
-  mutate(cycle = "control1") %>% #adds "cycle" identifier, for color/sorting later
-  mutate(species = "beech") %>%  #adds "species" identifier, might be helpful later?
-  select(logNum, A, gsw, date, Ci, cycle, species) #data that we might care about
-
-control2 <- PNNLTest %>% 
-  filter(obs >= 38) %>% #this should be 39 for the real thing!!
-  mutate(logNum = obs-37) %>% #the logNum now starts at 1 again, though this should be 38 for the real thing!
-  mutate(cycle = "control2") %>% 
-  mutate(species = "beech") %>% 
-  select(logNum, A, gsw, date, Ci, cycle, species)
-
-bucket <- UTTest %>% 
-  filter(obs <= 37) %>% 
-  mutate(logNum = obs) %>% 
-  mutate(cycle = "bucket") %>% 
-  mutate(species = "beech") %>% 
-  select(logNum, A, gsw, date, Ci, cycle, species)
-
-fresh <- UTTest%>% 
-  filter(obs >= 38) %>% 
-  mutate(logNum = obs - 37) %>% 
-  mutate(cycle = "fresh") %>% 
-  mutate(species = "beech") %>% 
-  select(logNum, A, gsw, date, Ci, cycle, species)
-
-detached <- NoNameTest %>% 
-  filter(obs <= 37) %>% 
-  mutate(logNum = obs) %>% 
-  mutate(cycle = "detached") %>% 
-  mutate(species = "beech") %>% 
-  select(logNum, A, gsw, date, Ci, cycle, species)
-
-salt <- NoNameTest %>% 
-  filter(obs >= 38) %>% 
-  mutate(logNum = obs - 37) %>% 
-  mutate(cycle = "salt") %>% 
-  mutate(species = "beech") %>% 
-  select(logNum, A, gsw, date, Ci, cycle, species)
-  
 ```
 
 
