@@ -1,6 +1,5 @@
 ---
-title: "Independent Project Markdown MESSY VERSION NOT CLEAN"
-subtitle: "MAGGIE CLEAN THE CODE IN A DOCUMENT COPY"
+title: "Independent Project Markdown"
 author: "Maggie and Kendal"
 date: "2026-07-20"
 output: html_document
@@ -53,10 +52,6 @@ library(dplyr)
 ```
 
 ```{r import data, include = FALSE}
-UTTest <- read.csv("2026-07-16-0925_UTProcTest_cleaned.csv") #bucket, fresh
-NoNameTest <- read.csv("2026-07-16-0824_NoNameProcTest_cleaned.csv") #detached, salt
-PNNLTest <- read.csv("2026-07-16_PNNLProcTest_cleaned.csv") #control a, control b
-
 UTDay1 <- read.csv("2026-07-21_UT.csv") #LITU1 detached, LITU1 salt, FAGR1 detached
 NoNameDay1 <- read.csv("2026-07-21_NoName.csv") #LITU1 bucket, LITU1 fresh, FAGR1 bucket
 PNNLDay1 <- read.csv("2026-07-21 PNNL Day 1.csv") #LITU1 control A, LITU1 control B, FAGR1 control A
@@ -72,10 +67,13 @@ PNNLDay3 <- read.csv("2026-07-24 PNNL (misnamed NoName) Day 3.csv") #FAGR2 bucke
 UTDay4 <- read.csv("2026-07-29 UT Day 4.csv") #FAGR3 detached, FAGR3 salt, LITU3 salt
 NoNameDay4 <- read.csv("2026-07-29 NoName Day 4.csv") #FAGR3 bucket, fresh, LITU3 fresh
 PNNLDay4 <- read.csv("2026-07-29 PNNL Day 4.csv") #FAGR3 controlA,B, LITU3 controlB
+
+NoNameDay5 <- read.csv("2026-07-30 noname day 5.csv") #LITU3 controlA
+UTDay5 <- read.csv("2026-07-30 ut day 5.csv") #LITU3 bucket
+PNNLDay5 <- read.csv("2026-07-30 pnnl day 5.csv") #LITU3 detached
 ```
 
 ```{r seperate into cycles}
-
 #could i make this a function?? does r do functions???
 #I MADE IT A FUNCTION!!! (it works!!) YAY!!
 cleanData <- function(dataSheet, cycleNumber, cycleType, spp, obsStart, obsEnd) {
@@ -88,7 +86,6 @@ cleanData <- function(dataSheet, cycleNumber, cycleType, spp, obsStart, obsEnd) 
     mutate(species = spp) %>% #adds species
     select(logNum, A, gsw, date, Ci, cycle, species) #get data!
 }
-
 
 #metadata sheet?
 
@@ -109,10 +106,15 @@ LITU_B2_control <- cleanData(PNNLDay2, "LITU_B2", "controlB", "LITU", 39, 75)
 LITU_B2_fresh <- cleanData(NoNameDay2, "LITU_B2", "fresh", "LITU", 39, 76)
 LITU_B2_salt <- cleanData(UTDay2, "LITU_B2", "salt", "LITU", 39, 76)
 
+#need to add in both LITU remaining cycles
 
+LITU_A3_control <- cleanData(NoNameDay5, "LITU_A3", "controlA", "LITU", 1, 37)
+LITU_A3_detached <- cleanData(PNNLDay5, "LITU_A3", "detached", "LITU", 1, 38)
+LITU_A3_bucket <- cleanData(UTDay5, "LITU_A3", "bucket", "LITU", 1, 38)
 
-
-LIT
+LITU_B3_control <- cleanData(PNNLDay4, "LITU_B3", "controlB", "LITU", 75, 111)
+LITU_B3_fresh <- cleanData(NoNameDay4, "LITU_B3", "fresh", "LITU", 77, 114)
+LITU_B3_salt <- cleanData(UTDay4, "LITU_B3", "salt", "LITU", 77, 114)
 
 
 #FAGR
@@ -176,6 +178,7 @@ plotOneLeaf(control2)
 ## one cycle: 
 ```{r graph one cycle, echo=FALSE}
 
+##Functions ----
 plotOneCycleA <- function(data1, data2, data3, title = "No title provided", lowerBound = -1, upperBound = 10) {
   #data1,2,3 = dataset, title = String, bounds = num (default 0:4)
   ggplot() + 
@@ -206,9 +209,7 @@ plotOneCycleGSW <- function(data1, data2, data3, title = "No title provided", lo
 } 
 #Debug: should make it so that cycle color is consistent regardless of input order. how to?
 
-plotOneCycleA(control1, bucket, detached, "Test A", 0, 4)
-plotOneCycleA(control2, fresh, salt, "Test B", 0, 4)
-
+#LITU----
 LITU_A1_graphA <- plotOneCycleA(LITU_A1_control, LITU_A1_bucket, LITU_A1_detached, "LITU A1", 0, 8)
 LITU_A1_graphA
 LITU_A1_graphGSW <- plotOneCycleGSW(LITU_A1_bucket, LITU_A1_control, LITU_A1_detached, "LITU A1", 0, 0.2)
@@ -229,6 +230,17 @@ LITU_B2_graphA
 LITU_B2_graphGSW <- plotOneCycleGSW(LITU_B2_control, LITU_B2_fresh, LITU_B2_salt, "LITU B2", 0, 0.3)
 LITU_B2_graphGSW
 
+LITU_A3_graphA <- plotOneCycleA(LITU_A3_control, LITU_A3_detached, LITU_A3_bucket, "LITU A3", -1, 8)
+LITU_A3_graphA
+LITU_A3_graphGSW <- plotOneCycleGSW(LITU_A3_control, LITU_A3_detached, LITU_A3_bucket, "LITU A3", 0, 0.3)
+LITU_A3_graphGSW
+
+LITU_B3_graphA <- plotOneCycleA(LITU_B3_control, LITU_B3_fresh, LITU_B3_salt, "LITU B3", -1, 8)
+LITU_B3_graphA
+LITU_B3_graphGSW <- plotOneCycleGSW(LITU_B3_control, LITU_B3_fresh, LITU_B3_salt, "LITU B3", 0, 0.1)
+LITU_B3_graphGSW
+
+#FAGR ----
 FAGR_A1_graphA <- plotOneCycleA(FAGR_A1_bucket, FAGR_A1_control, FAGR_A1_detached, "FAGR A1", -1, 7)
 FAGR_A1_graphA
 FAGR_A1_graphGSW <- plotOneCycleGSW(FAGR_A1_bucket, FAGR_A1_control, FAGR_A1_detached, "FAGR A1", 0, 0.05)
@@ -249,8 +261,20 @@ FAGR_B2_graphA
 FAGR_B2_graphGSW <- plotOneCycleGSW(FAGR_B2_control, FAGR_B2_fresh, FAGR_B2_salt, "FAGR B2", 0, 0.1)
 FAGR_B2_graphGSW
 
+FAGR_A3_graphA <- plotOneCycleA(FAGR_A3_bucket, FAGR_A3_control, FAGR_A3_detached, "FAGR A3", 0, 6)
+FAGR_A3_graphA 
+FAGR_A3_graphGSW <- plotOneCycleGSW(FAGR_A3_bucket, FAGR_A3_control, FAGR_A3_detached, "FAGR A3", 0, 0.1)
+FAGR_A3_graphGSW
+
+FAGR_B3_graphA <- plotOneCycleA(FAGR_B3_control, FAGR_B3_fresh, FAGR_B3_salt, "FAGR B3", 0, 6)
+FAGR_B3_graphA
+FAGR_B3_graphGSW <- plotOneCycleGSW(FAGR_B3_control, FAGR_B3_fresh, FAGR_B3_salt, "FAGR B3", 0, 0.1)
+FAGR_B3_graphGSW
+
+#ACRU ----
 
 
+#----
 #from original code
 #ggplot() + 
  # geom_line(data = control2, aes(x = logNum, y = A, color = cycle)) +
@@ -263,7 +287,7 @@ FAGR_B2_graphGSW
 
 
 ## by species?
-``` {r graph by species test, include = FALSE}
+``` {r graph by species test, echo = FALSE, include = FALSE}
 
 #need to combine species into one variable
   # c can smash them together, but doesn't really help?
@@ -273,13 +297,20 @@ FAGR_B2_graphGSW
 
 
 
-speciesAverageATest <- function(data1, data2, data3) {
-  (data1$A + data2$A + data3$A)/3
+#speciesAverageATest <- function(data1, data2, data3) {
+ # (data1$A + data2$A + data3$A)/3
+  
 } #i think this should work? #yes works but will need to like. actually test when i get more data tonight
 
-testAvg <-speciesAverageATest(LITU_B1_salt, LITU_B2_salt, LITU_B1_salt)
-all.equal(testAvg,LITU_B1_salt$A)
-testAvg
+#testAvg <-speciesAverageATest(LITU_B1_salt, LITU_B2_salt, LITU_B1_salt)
+#all.equal(testAvg,LITU_B1_salt$A)
+#testAvg
+
+#LITU_controlA <- speciesAverageATest(LITU_A1_control, LITU_A2_control, LITU_A3_control)
+#LITU_detached <- speciesAverageATest(LITU_A1_detached, LITU_A2_detached, LITU_A3_detached)
+#LITU_bucket <- speciesAverageATest(LITU_A1_bucket, LITU_A2_bucket, LITU_A3_bucket)
+
+#plotOneCycleA(LITU_controlA, LITU_detached, LITU_bucket)
 
 ```
 
