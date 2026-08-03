@@ -86,7 +86,6 @@ cleanData <- function(dataSheet, cycleNumber, cycleType, spp, obsStart, obsEnd) 
     mutate(species = spp) %>% #adds species
     select(logNum, A, gsw, date, Ci, cycle, species) #get data!
 }
-
 #metadata sheet?
 
 #LITU
@@ -134,7 +133,6 @@ FAGR_B2_control <- cleanData(NoNameDay3, "FAGR_B2", "controlB", "FAGR", 38, 74)
 FAGR_B2_fresh <- cleanData(PNNLDay3, "FAGR_B2", "fresh", "FAGR", 39, 76)
 FAGR_B2_salt <- cleanData(UTDay3, "FAGR_B2", "salt", "FAGR", 39, 76)
 
-#check log numbers!!
 FAGR_A3_control <- cleanData(NoNameDay4, "FAGR_A3", "controlA", "FAGR", 1, 37)
 FAGR_A3_detached <- cleanData(UTDay4, "FAGR_A3", "detached", "FAGR", 1, 38)
 FAGR_A3_bucket <- cleanData(PNNLDay4, "FAGR_A3", "bucket", "FAGR", 1, 38)
@@ -144,7 +142,6 @@ FAGR_B3_fresh <- cleanData(PNNLDay4, "FAGR_B3", "fresh", "FAGR", 39, 76)
 FAGR_B3_salt <- cleanData(UTDay4, "FAGR_B3", "salt", "FAGR", 39, 76)
 
 ```
-
 
 # Graphs
 
@@ -294,23 +291,57 @@ FAGR_B3_graphGSW
 #how to? 
   #new variable called [species][treatment]Combined[A/gsw]
   #maybe it takes [col] from [data frame], adds together and /3 for each value in the row?
+  #no, needs to average! (some control's don't have 3 obs bc i got lazy)
 
 
+#new idea: make new var ([tree]_[treatment]) with obs column (1:38), A and gsw for each replicate, and the avg of the three
 
-#speciesAverageATest <- function(data1, data2, data3) {
- # (data1$A + data2$A + data3$A)/3
-  
-} #i think this should work? #yes works but will need to like. actually test when i get more data tonight
+#i was having trouble with pipe logic so i just made this a separate function
+mergeData <- function(data1, data2, data3) {
+  halfMerge = merge(data1, data2, by = "logNum", all.x = TRUE) 
+  merge(halfMerge, data3, by = "logNum", all.x = TRUE)
+}
 
-#testAvg <-speciesAverageATest(LITU_B1_salt, LITU_B2_salt, LITU_B1_salt)
-#all.equal(testAvg,LITU_B1_salt$A)
-#testAvg
+#THSI DOES NOT WORK
+combineData <- function(data1, data2, data3) {
+   data = mergeData(data1, data2, data3) %>%  
+   rename(A1 = A.x) %>% 
+   rename(A2 = A.y) %>% 
+   rename(A3 = A) %>% 
+   rename(gsw1 = gsw.x) %>% 
+   rename(gsw2 = gsw.y) %>% 
+   rename(gsw3 = gsw) %>% 
+   select(logNum, A1, A2, A3, gsw1, gsw2, gsw3, species, cycle) 
+   #get the averages here
+   mutate(data, avgA = rowMeans(select(data, c(A1, A2, A3)), na.rm = TRUE)) %>%  
+   mutate(data, avgGSW = rowMeans(select(data, c(gsw1, gsw2, gsw3)), na.rm = TRUE))
+}
 
-#LITU_controlA <- speciesAverageATest(LITU_A1_control, LITU_A2_control, LITU_A3_control)
-#LITU_detached <- speciesAverageATest(LITU_A1_detached, LITU_A2_detached, LITU_A3_detached)
-#LITU_bucket <- speciesAverageATest(LITU_A1_bucket, LITU_A2_bucket, LITU_A3_bucket)
+LITUcontrolA <- combineData(LITU_A1_control, LITU_A2_control, LITU_A3_control)
+LITUbucket <- combineData(LITU_A1_bucket, LITU_A2_bucket, LITU_A3_bucket)
+LITUdetached <- combineData(LITU_A1_detached, LITU_A2_detached, LITU_A3_detached)
+LITUcontrolB <- combineData(LITU_B1_control, LITU_B2_control, LITU_B3_control)
+LITUsalt <- combineData(LITU_B1_salt, LITU_B2_salt, LITU_B3_salt)
+LITUfresh <- combineData(LITU_B1_fresh, LITU_B2_fresh, LITU_B3_fresh)
 
-#plotOneCycleA(LITU_controlA, LITU_detached, LITU_bucket)
+plotAvgA <- function(data1, data2, data3, title = "No title provided", lowerBound = -1, upperBound = 10) {
+  #data1,2,3 = dataset, title = String, bounds = num (default 0:4)
+  ggplot() + 
+    geom_line(data = subset(data1, !is.na(avgA)), aes(x = logNum, y = avgA, color = cycle)) +
+    geom_line(data = subset(data2, !is.na(avgA)), aes(x = logNum, y = avgA, color = cycle)) +
+    geom_line(data = subset(data3, !is.na(avgA)), aes(x = logNum, y = avgA, color = cycle)) +
+    geom_point(data = subset(data1, !is.na(avgA)), aes(x = logNum, y = avgA, color = cycle)) +
+    geom_point(data = subset(data2, !is.na(avgA)), aes(x = logNum, y = avgA, color = cycle)) +
+    geom_point(data = subset(data3, !is.na(avgA)), aes(x = logNum, y = avgA, color = cycle)) +
+    theme_bw() +
+    ggtitle(title) + 
+    coord_cartesian(ylim = c(lowerBound, upperBound))
+}
+
+LITU_A_avgA <- plotAvgA(LITUcontrolA, LITUbucket, LITUdetached)
+LITU_A_avgA
+LITU_B_avgA <- plotAvgA(LITUcontrolB, LITUfresh, LITUsalt)
+LITU_B_avgA
 
 ```
 
