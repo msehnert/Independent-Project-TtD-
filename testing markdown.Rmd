@@ -294,6 +294,9 @@ FAGR_B3_graphGSW
   #no, needs to average! (some control's don't have 3 obs bc i got lazy)
 
 
+#THIS IS VERY MESSY. CLEAN LATER
+
+
 #new idea: make new var ([tree]_[treatment]) with obs column (1:38), A and gsw for each replicate, and the avg of the three
 
 #i was having trouble with pipe logic so i just made this a separate function
@@ -324,6 +327,14 @@ LITUcontrolB <- combineData(LITU_B1_control, LITU_B2_control, LITU_B3_control)
 LITUsalt <- combineData(LITU_B1_salt, LITU_B2_salt, LITU_B3_salt)
 LITUfresh <- combineData(LITU_B1_fresh, LITU_B2_fresh, LITU_B3_fresh)
 
+FAGRcontrolA <- combineData(FAGR_A1_control, FAGR_A2_control, FAGR_A3_control)
+FAGRbucket <- combineData(FAGR_A1_bucket, FAGR_A2_bucket, FAGR_A3_bucket)
+FAGRdetached <- combineData(FAGR_A1_detached, FAGR_A2_detached, FAGR_A3_detached)
+FAGRcontrolB <- combineData(FAGR_B1_control, FAGR_B2_control, FAGR_B3_control)
+FAGRsalt <- combineData(FAGR_B1_salt, FAGR_B2_salt, FAGR_B3_salt)
+FAGRfresh <- combineData(FAGR_B1_fresh, FAGR_B2_fresh, FAGR_B3_fresh)
+
+
 plotAvgA <- function(data1, data2, data3, title = "No title provided", lowerBound = -1, upperBound = 10) {
   #data1,2,3 = dataset, title = String, bounds = num (default 0:4)
   ggplot() + 
@@ -338,10 +349,107 @@ plotAvgA <- function(data1, data2, data3, title = "No title provided", lowerBoun
     coord_cartesian(ylim = c(lowerBound, upperBound))
 }
 
+plotAvgGSW <- function(data1, data2, data3, title = "No title provided", lowerBound = 0, upperBound = 0.2) {
+  #data1,2,3 = dataset, title = String, bounds = num (default 0:4)
+  ggplot() + 
+    geom_line(data = subset(data1, !is.na(avgA)), aes(x = logNum, y = avgGSW, color = cycle)) +
+    geom_line(data = subset(data2, !is.na(avgA)), aes(x = logNum, y = avgGSW, color = cycle)) +
+    geom_line(data = subset(data3, !is.na(avgA)), aes(x = logNum, y = avgGSW, color = cycle)) +
+    geom_point(data = subset(data1, !is.na(avgA)), aes(x = logNum, y = avgGSW, color = cycle)) +
+    geom_point(data = subset(data2, !is.na(avgA)), aes(x = logNum, y = avgGSW, color = cycle)) +
+    geom_point(data = subset(data3, !is.na(avgA)), aes(x = logNum, y = avgGSW, color = cycle)) +
+    theme_bw() +
+    ggtitle(title) + 
+    coord_cartesian(ylim = c(lowerBound, upperBound))
+}
+
+
+#clean this up later
 LITU_A_avgA <- plotAvgA(LITUcontrolA, LITUbucket, LITUdetached)
 LITU_A_avgA
 LITU_B_avgA <- plotAvgA(LITUcontrolB, LITUfresh, LITUsalt)
 LITU_B_avgA
+
+LITU_A_avgGSW <- plotAvgGSW(LITUcontrolA, LITUbucket, LITUdetached, "LITU A gsw", 0, 0.2)
+LITU_A_avgGSW
+LITU_B_avgGSW <- plotAvgGSW(LITUcontrolB, LITUfresh, LITUsalt, "LITU B gsw", 0, 0.2)
+LITU_B_avgGSW
+
+ggplot() + 
+  geom_line(data = LITUcontrolA, aes(x = logNum, y = avgA, color = cycle)) +
+  geom_line(data = LITUcontrolB, aes(x = logNum, y = avgA, color = cycle)) + 
+  geom_line(data = LITUbucket, aes(x = logNum, y = avgA, color = cycle)) +
+  geom_line(data = LITUdetached, aes(x = logNum, y = avgA, color = cycle)) +
+  geom_line(data = LITUfresh, aes(x = logNum, y = avgA, color = cycle)) + 
+  geom_line(data = LITUsalt, aes(x = logNum, y = avgA, color = cycle)) +
+  geom_point(data = LITUcontrolA, aes(x = logNum, y = avgA, color = cycle)) +
+  geom_point(data = LITUcontrolB, aes(x = logNum, y = avgA, color = cycle)) + 
+  geom_point(data = LITUbucket, aes(x = logNum, y = avgA, color = cycle)) +
+  geom_point(data = LITUdetached, aes(x = logNum, y = avgA, color = cycle)) +
+  geom_point(data = LITUfresh, aes(x = logNum, y = avgA, color = cycle)) + 
+  geom_point(data = LITUsalt, aes(x = logNum, y = avgA, color = cycle)) +
+  theme_bw() +
+  ggtitle("all together litu") 
+
+ggplot() + 
+  geom_line(data = LITUcontrolA, aes(x = logNum, y = avgGSW, color = cycle)) +
+  geom_line(data = LITUcontrolB, aes(x = logNum, y = avgGSW, color = cycle)) + 
+  geom_line(data = LITUbucket, aes(x = logNum, y = avgGSW, color = cycle)) +
+  geom_line(data = LITUdetached, aes(x = logNum, y = avgGSW, color = cycle)) +
+  geom_line(data = LITUfresh, aes(x = logNum, y = avgGSW, color = cycle)) + 
+  geom_line(data = LITUsalt, aes(x = logNum, y = avgGSW, color = cycle)) +
+  geom_point(data = LITUcontrolA, aes(x = logNum, y = avgGSW, color = cycle)) +
+  geom_point(data = LITUcontrolB, aes(x = logNum, y = avgGSW, color = cycle)) + 
+  geom_point(data = LITUbucket, aes(x = logNum, y = avgGSW, color = cycle)) +
+  geom_point(data = LITUdetached, aes(x = logNum, y = avgGSW, color = cycle)) +
+  geom_point(data = LITUfresh, aes(x = logNum, y = avgGSW, color = cycle)) + 
+  geom_point(data = LITUsalt, aes(x = logNum, y = avgGSW, color = cycle)) +
+  theme_bw() +
+  ggtitle("all together litu") 
+
+
+FAGR_A_avgA <- plotAvgA(FAGRcontrolA, FAGRbucket, FAGRdetached)
+FAGR_A_avgA
+FAGR_B_avgA <- plotAvgA(FAGRcontrolB, FAGRfresh, FAGRsalt)
+FAGR_B_avgA
+
+FAGR_A_avgGSW <- plotAvgGSW(FAGRcontrolA, FAGRbucket, FAGRdetached, upper = 0.1)
+FAGR_A_avgGSW
+FAGR_B_avgGSW <- plotAvgGSW(FAGRcontrolB, FAGRfresh, FAGRsalt, upper = 0.1)
+FAGR_B_avgGSW
+
+ggplot() + 
+  geom_line(data = FAGRcontrolA, aes(x = logNum, y = avgA, color = cycle)) +
+  geom_line(data = FAGRcontrolB, aes(x = logNum, y = avgA, color = cycle)) + 
+  geom_line(data = FAGRbucket, aes(x = logNum, y = avgA, color = cycle)) +
+  geom_line(data = FAGRdetached, aes(x = logNum, y = avgA, color = cycle)) +
+  geom_line(data = FAGRfresh, aes(x = logNum, y = avgA, color = cycle)) + 
+  geom_line(data = FAGRsalt, aes(x = logNum, y = avgA, color = cycle)) +
+  geom_point(data = FAGRcontrolA, aes(x = logNum, y = avgA, color = cycle)) +
+  geom_point(data = FAGRcontrolB, aes(x = logNum, y = avgA, color = cycle)) + 
+  geom_point(data = FAGRbucket, aes(x = logNum, y = avgA, color = cycle)) +
+  geom_point(data = FAGRdetached, aes(x = logNum, y = avgA, color = cycle)) +
+  geom_point(data = FAGRfresh, aes(x = logNum, y = avgA, color = cycle)) + 
+  geom_point(data = FAGRsalt, aes(x = logNum, y = avgA, color = cycle)) +
+  theme_bw() +
+  ggtitle("all together fagr") 
+
+ggplot() + 
+  geom_line(data = FAGRcontrolA, aes(x = logNum, y = avgGSW, color = cycle)) +
+  geom_line(data = FAGRcontrolB, aes(x = logNum, y = avgGSW, color = cycle)) + 
+  geom_line(data = FAGRbucket, aes(x = logNum, y = avgGSW, color = cycle)) +
+  geom_line(data = FAGRdetached, aes(x = logNum, y = avgGSW, color = cycle)) +
+  geom_line(data = FAGRfresh, aes(x = logNum, y = avgGSW, color = cycle)) + 
+  geom_line(data = FAGRsalt, aes(x = logNum, y = avgGSW, color = cycle)) +
+  geom_point(data = FAGRcontrolA, aes(x = logNum, y = avgGSW, color = cycle)) +
+  geom_point(data = FAGRcontrolB, aes(x = logNum, y = avgGSW, color = cycle)) + 
+  geom_point(data = FAGRbucket, aes(x = logNum, y = avgGSW, color = cycle)) +
+  geom_point(data = FAGRdetached, aes(x = logNum, y = avgGSW, color = cycle)) +
+  geom_point(data = FAGRfresh, aes(x = logNum, y = avgGSW, color = cycle)) + 
+  geom_point(data = FAGRsalt, aes(x = logNum, y = avgGSW, color = cycle)) +
+  theme_bw() +
+  ggtitle("all together fagr") 
+
 
 ```
 
