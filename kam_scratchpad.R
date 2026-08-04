@@ -64,4 +64,25 @@ glimpse(cleaned_all)
 
 
 ggplot(cleaned_all, aes(logNum, A, color = treatment)) +
-  geom_point() + geom_line() + facet_grid(species ~ cycle)
+  geom_point() + geom_line() + facet_grid(species ~ cycle) +
+  ggtitle("Example Assimilation Panel")
+
+ggplot(cleaned_all, aes(logNum, gsw, color = treatment)) +
+  geom_point() + geom_line() + facet_grid(species ~ cycle) +
+  ggtitle("Example Stomatal Conductance Panel")
+
+relative <- cleaned_all %>%
+  group_by(species, treatment, cycle) %>%
+  arrange(logNum) %>%
+  mutate(A0 = first(A),
+         gsw0 = first(gsw),
+         A_rel = A/A0,
+         gsw_rel = gsw/gsw0)
+
+ggplot(relative, aes(logNum, A_rel, color = treatment)) +
+  geom_point() + geom_line() + facet_grid(species ~ cycle) +
+  ggtitle("Example Assimilation Panel")
+
+ggplot(relative, aes(logNum, gsw_rel, color = treatment)) +
+  geom_point() + geom_line() + facet_grid(species ~ cycle) +
+  ggtitle("Example Stomatal Conductance Panel")
