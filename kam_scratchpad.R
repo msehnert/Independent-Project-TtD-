@@ -78,6 +78,9 @@ relative <- cleaned_all %>%
          gsw0 = first(gsw),
          A_rel = A/A0,
          gsw_rel = gsw/gsw0)
+#%>% to calculate means of relative assmilation and stomatal conductance
+# add to this summarize statement (can also do sd, counts, etc)
+# summarize(mean_A = mean(A_rel))
 
 ggplot(relative, aes(logNum, A_rel, color = treatment)) +
   geom_point() + geom_line() + facet_grid(species ~ cycle) +
