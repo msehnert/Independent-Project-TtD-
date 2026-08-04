@@ -1,0 +1,7 @@
+﻿Date,Instrument,Species,Treatment,Cycle,Start,End,File,Notes
+20260721,PNNL,LITU,Control,A,2,39,2026-07-21 PNNL Day 1.csv,
+20260721,PNNL,LITU,Control,B,41,77,2026-07-21 PNNL Day 1.csv,
+20260721,PNNL,FAGR,Control,A,79,116,2026-07-21 PNNL Day 1.csv,
+20260721,NoName,LITU,Bucket,A,1,38,2026-07-21_NoName.csv,
+20260721,NoName,LITU,Bucket,B,40,77,2026-07-21_NoName.csv,
+20260721,NoName,FAGR,Bucket,A,80,117,2026-07-21_NoName.csv,
