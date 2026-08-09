@@ -39,7 +39,19 @@ Each cycle runs for 75 minutes, logging data every 120 seconds. Cycles where a t
     + by cycle  
     + [overall by species?]  
     + [overall by cycle?]  
+    
+    
+#STEPS: 
+##take kendal's code to build metadata file and make data read-in easier/master data frame
+##calculate relative change for each time series from t0
+##make some graphs of each individual relative data (this beech, etc) and the summarized relative data (all beech, etc)
+##need to know what the baseline is for each licor 
+###run the irgas for 75 minutes, take the average, subtract from values 
 
+
+
+
+##clunky way to do it: could you make column that's x% of original
 
 ```{r setup, include=FALSE} 
 knitr::opts_chunk$set(echo = TRUE) #this is from original markdown doc
