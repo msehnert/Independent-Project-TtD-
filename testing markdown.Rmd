@@ -125,12 +125,19 @@ cleaned_all <- read_and_clean_all(metadata, data_dir = "Data")
 
 glimpse(cleaned_all)
 
+#adjusted with blanks test?
+#needs to: 
+  #average UT, NoName, and PNNL's blanks to get adj. factor for A and gsw
+  #subtract that value from each A or gsw value in respective rows
+#my Qs: how to get it to know which columns to subtract from?
 
-ggplot(cleaned_all, aes(logNum, A, color = treatment)) +
-  geom_point() + geom_line() + facet_grid(species ~ cycle) +
+
+ggplot(data = subset(cleaned_all, !is.na(cycle)), aes(logNum, A, color = treatment)) +
+  #geom_point() + 
+  geom_line(aes(alpha = 0.5)) + facet_grid(species ~ cycle) + #what is ~ doing?
   ggtitle("Example Assimilation Panel")
 
-ggplot(cleaned_all, aes(logNum, gsw, color = treatment)) +
+ggplot(subset(cleaned_all, !is.na(cycle)), aes(logNum, gsw, color = treatment)) +
   geom_point() + geom_line() + facet_grid(species ~ cycle) +
   ggtitle("Example Stomatal Conductance Panel")
 
