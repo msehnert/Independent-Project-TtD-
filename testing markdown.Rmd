@@ -42,9 +42,8 @@ Each cycle runs for 75 minutes, logging data every 120 seconds. Cycles where a t
     
     
 #STEPS: 
-##take kendal's code to build metadata file and make data read-in easier/master data frame
-##calculate relative change for each time series from t0
 ##make some graphs of each individual relative data (this beech, etc) and the summarized relative data (all beech, etc)
+##add error bars (grey border) to the graph, make more readable
 
 ##clunky way to do it: could you make column that's x% of original
 
@@ -60,9 +59,9 @@ library(tidyverse)
 library(zoo)
 ```
 
-```{r post-kendal meeting work, include = FALSE}
+```{r Data read-in and cleaning, include = FALSE}
 
-#KAM tries to read in data using metadata sheet
+#Metadata-based read-in
 data_dir <- "Data"
 metadata <- read.csv("TTD_metadata.csv", stringsAsFactors = FALSE)
 
@@ -74,7 +73,6 @@ csv_list <- list.files(
   full.names = TRUE
 )
 
-#this is my function just cleaned!
 cleanData <- function(dataSheet, IRGAName, cycleAorB, cycleType, spp, obsStart, obsEnd, file_name, replicate) {
   dataSheet %>%
     filter(between(obs, obsStart, obsEnd)) %>%
@@ -88,47 +86,37 @@ cleanData <- function(dataSheet, IRGAName, cycleAorB, cycleType, spp, obsStart, 
       replicate = replicate
     ) %>%
     select(date, IRGAName, species, cycle, treatment, replicate, logNum, A, gsw, Ci)
-  #add additional columns above if more data is desired from licor output
 }
 
 #taking all data from metadata/csvs, cleaning data, returning as one data frame
-##oh!!! R does use return(), but it's not required!
 read_and_clean_all <- function(metadata, data_dir = "Data") {
-  
   metadata <- metadata %>%
-    mutate(File = as.character(File))
-  
-  # For each row in metadata, read, clean, and return a tibble
+    mutate(File = as.character(File)) #taking file name, making String
+  #For each row in metadata, read, clean, and return a tibble
   all_clean <- metadata %>%
     pmap_dfr(function(Date, Instrument, Species, Treatment, Cycle, Replicate, Start, End, File, Notes) {
-      
-      # Build full file path
-      fullpath <- file.path(data_dir, File)
-      
-      # Read raw CSV
-      raw <- readr::read_csv(fullpath, show_col_types = FALSE)
-      
-      # Apply cleaning based on metadata fields
-      cleanData(
+      fullpath <- file.path(data_dir, File) # Build full file path
+      raw <- readr::read_csv(fullpath, show_col_types = FALSE)  # Read raw CSV
+      cleanData( #cleaning data to rename/only use needed cols
         dataSheet  = raw,
         IRGAName   = Instrument,  # use the metadata "Instrument" (PNNL/NoName/UT)
-        cycleAorB  = Cycle,       # use the metadata "Cycle" (A/B/etc.)
-        cycleType  = Treatment,   # use the metadata "Treatment"
-        spp        = Species,     # use the metadata "Species"
-        obsStart   = Start,
-        obsEnd     = End,
-        file_name  = File,
-        replicate  = Replicate    #use the metadata "Replicate"
+        cycleAorB  = Cycle,       # use the metadata "Cycle" (A/B, NA = blank)
+        cycleType  = Treatment,   # use the metadata "Treatment" (Control, Fresh, Salt, etc)
+        spp        = Species,     # use the metadata "Species" (ACRU, FAGR, LITU)
+        obsStart   = Start,       # first log num
+        obsEnd     = End,         # last log num
+        file_name  = File,        # which .csv the data is from
+        replicate  = Replicate    # use the metadata "Replicate"
       )
-      
     })
-  
   return(all_clean)
 }
 
 cleaned_all <- read_and_clean_all(metadata, data_dir = "Data")
-
 glimpse(cleaned_all)
+
+
+#Clean/manip data
 
 #adjusted with blanks test?
 #needs to: 
@@ -136,7 +124,34 @@ glimpse(cleaned_all)
   #subtract that value from each A or gsw value in respective rows
 #my Qs: how to get it to know which columns to subtract from?
 
-cleanedAdjustedAll = cleaned_all |> 
+#Confession: I did these in Excel because I didn't want to waste time doing it in R. I'll come back to this
+UTBlankA <- -0.046589049
+UTBlankgsw <- 0.000402572
+
+NoNameBlankA <- 0.720360211
+NoNmaeBlankgsw <- 0.002580013
+  
+PNNLBlankA <-  0.28919685 
+PNNLBlankgsw <- -0.000260562
+
+#doing this manually, again will figure out how to do it together later
+
+#DOES NOT WORK
+cleaned_adjusted_all <- cleaned_all |> 
+  group_by(IRGAName) |> 
+  mutate(
+    if(IRGAName == "UT") {
+      adjA = A - UTBlankA +
+      adjGSW = gsw - UTBlankgsw
+    } else if (IRGAName == "NoName") {
+      adjA = A - NoNameBlankA +
+      adjGSW = gsw - NoNameBlankgsw
+    } else {
+      adjA = A - PNNLBlankA +
+      adjGSW = gsw - PNNLBlankgsw
+    }
+  )
+  
   #blankA = mean(#IRGA A col where cycle = Blank)
   #blankGSW = mean(#IRGA gsw col where cycle = Blank)
   #group_by(IRGAName)
@@ -170,6 +185,183 @@ relative <- cleaned_all %>%
 
 ```
 
+# Graphs
+ideas: 
+can i color code things more properly?
+how to make graphs more readable?
+
+## with K: 
+```{r all data graphs, include = FALSE}
+###
+### K chunk from August 12th meeting
+###
+
+#cleaning data step first (so we only have to do it once)
+data <- cleaned_all %>%
+  filter(! is.na(cleaned_all$cycle),
+         A < 12) #remove outliers in A
+#(i like having the new var name out front to easily find it later!)
+
+#making means data frame for plotting
+clean_means <- data %>%
+  group_by(species, logNum, treatment, cycle) %>%
+  summarize(A_mean = mean(A),
+            A_sd = sd(A),
+            gsw_mean = mean(gsw),
+            gsw_sd = sd(gsw)) #-> clean_means
+
+#making rolled time series data frame for plotting
+#rolled average = plots the average of this and the next two (n=3), smooths curve
+rolled <- data %>%
+  group_by(species, treatment, cycle, replicate) %>%
+  arrange(logNum) %>%
+  mutate(A_roll = zoo::rollmean(A, k = 3, align = "left", fill = NA),
+         gsw_roll = zoo::rollmean(gsw, k = 3, align = "left", fill = NA)) # -> rolled
+
+#and lastly, making an average of the rolled values for plotting
+#may decide later that any or all of these are not useful
+rolled_means <- rolled %>%
+  ungroup() %>%
+  group_by(species, logNum, treatment, cycle) %>%
+  summarize(A_mean = mean(A_roll),
+            A_sd = sd(A_roll),
+            gsw_mean = mean(gsw_roll),
+            gsw_sd = sd(gsw_roll)) #-> rolled_means
+
+
+#a half-decent plot with errorbars
+ggplot() + geom_line(data = rolled_means, aes(logNum, A_mean, color = treatment),
+                     linewidth = 1.25) + 
+  geom_point(data = clean_means, aes(logNum, A_mean, color = treatment), alpha = 0.5) + 
+  geom_errorbar(data = clean_means, aes(x = logNum, ymin = A_mean - A_sd, ymax = A_mean + A_sd,
+                                       color = treatment), alpha = 0.3) +
+  geom_hline(yintercept = 0, color = 'red') + #adds red line on 0
+  facet_grid(species ~ cycle, scales = "free_y") + theme_bw()
+
+#attempt to graph with ribbons instead of lines
+ggplot() + geom_line(data = rolled_means, aes(logNum, A_mean, color = treatment),
+                     linewidth = 1.25) + 
+  geom_point(data = clean_means, aes(logNum, A_mean, color = treatment), alpha = 0.5) + 
+  geom_ribbon(data = clean_means, aes(x = logNum, ymin = A_mean - A_sd, ymax = A_mean + A_sd,
+                                       color = treatment, fill = treatment), alpha = 0.1) +
+  geom_hline(yintercept = 0, color = 'red') +
+  facet_grid(species ~ cycle, scales = "free_y") + theme_bw()
+
+
+#same as above, but with gsw
+ggplot() + geom_line(data = rolled_means, aes(logNum, gsw_mean, color = treatment),
+                     linewidth = 1.25) + 
+  geom_point(data = clean_means, aes(logNum, gsw_mean, color = treatment), alpha = 0.5) + 
+  geom_errorbar(data = clean_means, aes(x = logNum, ymin = gsw_mean - gsw_sd, ymax = gsw_mean + gsw_sd,
+                                       color = treatment), alpha = 0.3) +
+  geom_hline(yintercept = 0, color = 'red') + #adds red line on 0
+  facet_grid(species ~ cycle, scales = "free_y") + theme_bw()
+
+ggplot() + geom_line(data = rolled_means, aes(logNum, gsw_mean, color = treatment),
+                     linewidth = 1.25) + 
+  geom_point(data = clean_means, aes(logNum, gsw_mean, color = treatment), alpha = 0.5) + 
+  #geom_ribbon(data = clean_means, aes(x = logNum, ymin = gsw_mean - gsw_sd, ymax = gsw_mean + gsw_sd,
+                                      # color = treatment, fill = treatment), alpha = 0.3) +
+  geom_hline(yintercept = 0, color = 'red') + #adds red line on 0
+  facet_grid(species ~ cycle)  + theme_bw()
+
+
+#K skipped this
+# cleaned_all %>%
+#  filter(!is.na(cycle),
+#         replicate = 1) %>%
+# ggplot(aes(logNum, gsw, color = treatment)) +
+#   geom_point() + geom_line() + facet_grid(species ~ cycle, scales = "free_y") +
+#   ggtitle("Example Stomatal Conductance Panel")
+
+
+
+#NEEDS TO ADJUST: 
+##can i color-code the lines? (detached = red, control = green, bucket = cyan?, salt = yellow, fresh = blue)
+
+
+
+#Prior graphs
+#make sure to rename with adj variable data set
+ggplot(data = subset(cleaned_all, !is.na(cycle)), aes(logNum, A, color = treatment)) +
+  geom_point(aes(alpha = 0.5)) +
+  geom_line(aes(alpha = 0.5)) + facet_grid(species ~ cycle, scales = "free_y") + #~ creates the grid row/col
+  ggtitle("Example Assimilation Panel")
+
+ggplot(subset(cleaned_all, !is.na(cycle)), aes(logNum, gsw, color = treatment)) +
+  geom_point() + geom_line() + facet_grid(species ~ cycle, scales = "free_y") +
+  ggtitle("Example Stomatal Conductance Panel")
+
+#these used "relative" data set from the original document
+ggplot(subset(relative,!is.na(cycle)), aes(logNum, A_rel, color = treatment)) +
+  geom_point() + geom_line() + facet_grid(species ~ cycle) +
+  ggtitle("Example Assimilation Panel")
+
+ggplot(subset(relative,!is.na(cycle)), aes(logNum, gsw_rel, color = treatment)) +
+  geom_point() + geom_line() + facet_grid(species ~ cycle, scales = "free_y") +
+  ggtitle("Example Stomatal Conductance Panel")
+```
+
+#Statistics
+```{r Statistics, echo = FALSE}
+
+#a simple test of bucket effect
+
+#isolate data for testing effect
+simple_bucket_test <-  data %>%
+  ungroup() %>%
+  group_by(treatment, species, replicate) %>%
+  filter(cycle == "A",
+         treatment != "Detached",
+         logNum < 26 & logNum > 14) %>%
+  summarize(A_mean = mean(A),
+            gsw_mean = mean(gsw)) #-> simple_bucket_test
+
+#Effect on photosynthetic rate
+simple_bucket1 <- aov(A_mean ~ treatment * species,
+                    data = simple_bucket_test) 
+summary(simple_bucket1)
+
+
+#Effect on stomatal conductance
+simple_bucket2 <- aov(gsw_mean ~ treatment * species,
+                    data = simple_bucket_test) 
+summary(simple_bucket2)
+
+
+
+#combining cylces to double the statistics
+combinedCyclesData <- data |> 
+  ungroup() |> 
+  mutate(across("treatment", str_replace, "Fresh", "Bucket")) |> 
+  group_by(treatment, species, replicate) |> 
+  filter(treatment != "Detached", treatment != "Salt",
+         logNum < 26 & logNum > 14) |> 
+  summarize(A_mean = mean(A),
+            gsw_mean = mean(gsw))
+
+simpleDoubleBucketA <- aov(A_mean ~ treatment*species, 
+                           data = combinedCyclesData)
+summary(simpleDoubleBucketA)
+
+simpleDoubleBucketGSW <- aov(A_mean ~ treatment * species,
+                             data = combinedCyclesData)
+summary(simpleDoubleBucketGSW)
+
+
+```
+
+
+## by species
+``` {r graph by species NEW, echo = FALSE, include = fALSE} 
+
+
+
+
+```
+
+#old work
+##old import/separating
 ```{r import data OLD, include = FALSE}
 UTDay1 <- read.csv("2026-07-21_UT.csv") #LITU1 detached, LITU1 salt, FAGR1 detached
 NoNameDay1 <- read.csv("2026-07-21_NoName.csv") #LITU1 bucket, LITU1 fresh, FAGR1 bucket
@@ -194,7 +386,6 @@ PNNLDay5 <- read.csv("2026-07-30 pnnl day 5.csv") #LITU3 detached
 UTDay8 <- read.csv("data/2026-08-11 UT Day 8.csv") #controls for ACRU2B/ACRU3A
 NoNameDay8 <- read.csv("data/2026-08-11 NoName Day 8.csv") #fresh and bucket
 ```
-
 ```{r seperate into cycles OLD, include = FALSE}
 #could i make this a function?? does r do functions???
 #I MADE IT A FUNCTION!!! (it works!!) YAY!!
@@ -273,45 +464,7 @@ ACRU_A3_bucket <- cleanData(NoNameDay8, "ACRU_B2", "bucket", "ACRU", 39, 76)
 
 ```
 
-# Graphs
-ideas: 
-can i color code things more properly?
-how to make graphs more readable?
-
-## with K: 
-```{r all data graphs, include = FALSE}
-#NEEDS TO ADJUST: 
-##very hard to read these graphs! too bulky lines, overlap
-##can i color-code the lines? (detached = red, control = green, bucket = cyan?, salt = yellow, fresh = blue)
-
-
-
-##the internet suggests using a loess() function to plot a smoothed graph- could try?
-
-
-#make sure to rename with adj variable data set
-ggplot(data = subset(cleaned_all, !is.na(cycle)), aes(logNum, A, color = treatment)) +
-  geom_point(aes(alpha = 0.5)) +
-  geom_line(aes(alpha = 0.5)) + facet_grid(species ~ cycle, scales = "free_y") + #~ creates the grid row/col
-  ggtitle("Example Assimilation Panel")
-
-ggplot(subset(cleaned_all, !is.na(cycle)), aes(logNum, gsw, color = treatment)) +
-  geom_point() + geom_line() + facet_grid(species ~ cycle, scales = "free_y") +
-  ggtitle("Example Stomatal Conductance Panel")
-
-#these used "relative" data set from the original document
-ggplot(subset(relative,!is.na(cycle)), aes(logNum, A_rel, color = treatment)) +
-  geom_point() + geom_line() + facet_grid(species ~ cycle) +
-  ggtitle("Example Assimilation Panel")
-
-ggplot(subset(relative,!is.na(cycle)), aes(logNum, gsw_rel, color = treatment)) +
-  geom_point() + geom_line() + facet_grid(species ~ cycle, scales = "free_y") +
-  ggtitle("Example Stomatal Conductance Panel")
-
-
-```
-
-## one cycle: 
+## old cycle graphing: 
 ```{r graph one cycle, echo=FALSE}
 
 ##Functions ----
@@ -422,7 +575,7 @@ FAGR_B3_graphGSW
 ```
 
 
-## by species?
+## old summary graphing
 ``` {r graph by species test OLD, echo = FALSE, include = FALSE}
 
 #need to combine species into one variable
@@ -592,16 +745,7 @@ ggplot() +
 
 ```
 
-## by species
-``` {r graph by species NEW, echo = FALSE, include = fALSE} 
 
-
-
-
-```
-
-
-## by treatment?
 
 
 
