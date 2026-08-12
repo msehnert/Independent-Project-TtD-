@@ -51,6 +51,7 @@ library(ggplot2)
 library(dplyr)
 ```
 
+<<<<<<< Updated upstream
 ```{r import data, include = FALSE}
 UTDay1 <- read.csv("2026-07-21_UT.csv") #LITU1 detached, LITU1 salt, FAGR1 detached
 NoNameDay1 <- read.csv("2026-07-21_NoName.csv") #LITU1 bucket, LITU1 fresh, FAGR1 bucket
@@ -140,6 +141,218 @@ FAGR_A3_bucket <- cleanData(PNNLDay4, "FAGR_A3", "bucket", "FAGR", 1, 38)
 FAGR_B3_control <- cleanData(NoNameDay4, "FAGR_B3", "controlB", "FAGR", 38, 74)
 FAGR_B3_fresh <- cleanData(PNNLDay4, "FAGR_B3", "fresh", "FAGR", 39, 76)
 FAGR_B3_salt <- cleanData(UTDay4, "FAGR_B3", "salt", "FAGR", 39, 76)
+=======
+```{r post-kendal meeting work, include = FALSE, message = FALSE}
+
+#KAM tries to read in data using metadata sheet
+data_dir <- "Data"
+metadata <- read.csv("TTD_metadata.csv", stringsAsFactors = FALSE)
+
+#need to look into what this one is doing specifically
+##guess: creating a list of csv files based on if it has ".csv" in the "data" files
+csv_list <- list.files(
+  path = data_dir,
+  pattern = "\\.csv$",
+  full.names = TRUE
+)
+
+#this is my function just cleaned!
+cleanData <- function(dataSheet, IRGAName, cycleAorB, cycleType, spp, obsStart, obsEnd, file_name, replicate) {
+  dataSheet %>%
+    filter(between(obs, obsStart, obsEnd)) %>%
+    mutate(
+      logNum   = obs - (obsStart - 1),
+      cycle    = cycleAorB,
+      treatment = cycleType,
+      species  = spp,
+      File     = file_name,
+      IRGAName = IRGAName,
+      replicate = replicate
+    ) %>%
+    select(date, IRGAName, species, cycle, treatment, replicate, logNum, A, gsw, Ci)
+  #add additional columns above if more data is desired from licor output
+}
+
+#taking all data from metadata/csvs, cleaning data, returning as one data frame
+##oh!!! R does use return(), but it's not required!
+read_and_clean_all <- function(metadata, data_dir = "Data") {
+  
+  metadata <- metadata %>%
+    mutate(File = as.character(File))
+  
+  # For each row in metadata, read, clean, and return a tibble
+  all_clean <- metadata %>%
+    pmap_dfr(function(Date, Instrument, Species, Treatment, Cycle, Replicate, Start, End, File, Notes) {
+      
+      # Build full file path
+      fullpath <- file.path(data_dir, File)
+      
+      # Read raw CSV
+      raw <- readr::read_csv(fullpath, show_col_types = FALSE)
+      
+      # Apply cleaning based on metadata fields
+      cleanData(
+        dataSheet  = raw,
+        IRGAName   = Instrument,  # use the metadata "Instrument" (PNNL/NoName/UT)
+        cycleAorB  = Cycle,       # use the metadata "Cycle" (A/B/etc.)
+        cycleType  = Treatment,   # use the metadata "Treatment"
+        spp        = Species,     # use the metadata "Species"
+        obsStart   = Start,
+        obsEnd     = End,
+        file_name  = File,
+        replicate  = Replicate    #use the metadata "Replicate"
+      )
+      
+    })
+  
+  return(all_clean)
+}
+
+cleaned_all <- read_and_clean_all(metadata, data_dir = "Data")
+
+glimpse(cleaned_all)
+
+#adjusted with blanks test?
+#needs to: 
+  #average UT, NoName, and PNNL's blanks to get adj. factor for A and gsw
+  #subtract that value from each A or gsw value in respective rows
+#my Qs: how to get it to know which columns to subtract from?
+
+cleanedAdjustedAll = cleaned_all |> 
+  #blankA = mean(#IRGA A col where cycle = Blank)
+  #blankGSW = mean(#IRGA gsw col where cycle = Blank)
+  #group_by(IRGAName)
+    mutate(adjA = A - blankA) #subtract blankA from all A rows
+    mutate(adjGSW = gsw - blankGSW)#subtract blankGSW from all gsw rows
+  #}
+
+
+#the one that would tell when/if it reaches 20% decrease
+placeholderName = function(percent, ){
+  cleaned_all |> 
+    group_by(species, treatment, cycle, replicate) %>%
+    arrange(logNum) |> 
+      #for the cycle, iterate one index at a time.
+      #if there are three consecutive "fail" at a time, return first index of fail
+    
+  #return logNum where first true if true, else return NA
+}
+
+
+relative <- cleaned_all %>%
+  group_by(species, treatment, cycle) %>%
+  arrange(logNum) %>%
+  mutate(A0 = first(A),
+         gsw0 = first(gsw),
+         A_rel = A/A0,
+         gsw_rel = gsw/gsw0)
+#%>% to calculate means of relative assmilation and stomatal conductance
+# add to this summarize statement (can also do sd, counts, etc)
+# summarize(mean_A = mean(A_rel))
+
+```
+
+```{r import data OLD, include = FALSE}
+# UTDay1 <- read.csv("2026-07-21_UT.csv") #LITU1 detached, LITU1 salt, FAGR1 detached
+# NoNameDay1 <- read.csv("2026-07-21_NoName.csv") #LITU1 bucket, LITU1 fresh, FAGR1 bucket
+# PNNLDay1 <- read.csv("2026-07-21 PNNL Day 1.csv") #LITU1 control A, LITU1 control B, FAGR1 control A
+# 
+# UTDay2 <- read.csv("2026-07-22 UT Day 2.csv") #LITU2 detached, LITU2 salt, FAGR1 salt, blank = obs 
+# NoNameDay2 <- read.csv("2026-07-22 NoName Day 2.csv") #LITU2 bucket, LITU2 fresh, FAGR1 fresh, blank = obs 115
+# PNNLDay2 <- read.csv("2026-07-22 PNNL Day 2.csv") #LITU2 controlA, LITU2 controlB, FAGR2 controlB, blank = obs 113
+# 
+# UTDay3 <- read.csv("2026-07-24 UT Day 3.csv") #FAGR2 detached, salt, blank = 77
+# NoNameDay3 <- read.csv("2026-07-24 NoName (misnamed PNNL)Day 3.csv") #FAGR2 control A, control b, blank = NA
+# PNNLDay3 <- read.csv("2026-07-24 PNNL (misnamed NoName) Day 3.csv") #FAGR2 bucket, fresh, blank = 77
+# 
+# UTDay4 <- read.csv("2026-07-29 UT Day 4.csv") #FAGR3 detached, FAGR3 salt, LITU3 salt
+# NoNameDay4 <- read.csv("2026-07-29 NoName Day 4.csv") #FAGR3 bucket, fresh, LITU3 fresh
+# PNNLDay4 <- read.csv("2026-07-29 PNNL Day 4.csv") #FAGR3 controlA,B, LITU3 controlB
+# 
+# NoNameDay5 <- read.csv("2026-07-30 noname day 5.csv") #LITU3 controlA
+# UTDay5 <- read.csv("2026-07-30 ut day 5.csv") #LITU3 bucket
+# PNNLDay5 <- read.csv("2026-07-30 pnnl day 5.csv") #LITU3 detached
+# 
+# UTDay8 <- read.csv("data/2026-08-11 UT Day 8.csv") #controls for ACRU2B/ACRU3A
+# NoNameDay8 <- read.csv("data/2026-08-11 NoName Day 8.csv") #fresh and bucket
+```
+
+```{r seperate into cycles OLD, include = FALSE}
+# #could i make this a function?? does r do functions???
+# #I MADE IT A FUNCTION!!! (it works!!) YAY!!
+# cleanData <- function(dataSheet, cycleNumber, cycleType, spp, obsStart, obsEnd) {
+#   #dataSheet = data, cylceNumber = String, cycleType = String, spp = String, obsStart = int, obsEnd = int
+#   dataSheet %>% #grabs from correct data sheet
+#     filter(between(obs, obsStart, obsEnd)) %>% #filters to correct log numbers
+#     mutate(logNum = obs - (obsStart- 1)) %>% #makes it so logNum always starts on 1
+#     mutate(name = cycleNumber) %>% #(like LITU_A1 = tulip cycle a rep 1), to ID cycle #
+#     mutate(cycle = cycleType) %>% #adds cycle type
+#     mutate(species = spp) %>% #adds species
+#     select(logNum, A, gsw, date, Ci, cycle, species) #get data!
+# }
+# #metadata sheet?
+# 
+# #LITU
+# LITU_A1_control <- cleanData(PNNLDay1, "LITU_A1", "controlA", "LITU", 2, 39)
+# LITU_A1_detached <- cleanData(UTDay1, "LITU_A1", "detached", "LITU", 1, 38)
+# LITU_A1_bucket <- cleanData(NoNameDay1, "LITU_A1", "bucket", "LITU", 1, 38)
+# 
+# LITU_B1_control <- cleanData(PNNLDay1, "LITU_B1", "controlB", "LITU", 41, 77)
+# LITU_B1_fresh <- cleanData(NoNameDay1, "LITU_B1", "fresh", "LITU", 40, 77)
+# LITU_B1_salt <- cleanData(UTDay1, "LITU_B1", "salt", "LITU", 40, 77)
+# 
+# LITU_A2_control <- cleanData(PNNLDay2, "LITU_A2", "controlA", "LITU", 1, 38)
+# LITU_A2_detached <- cleanData(UTDay2, "LITU_A2", "detached", "LITU", 1, 38)
+# LITU_A2_bucket <- cleanData(NoNameDay2, "LITU_A2", "bucket", "LITU", 1, 38)
+# 
+# LITU_B2_control <- cleanData(PNNLDay2, "LITU_B2", "controlB", "LITU", 39, 75)
+# LITU_B2_fresh <- cleanData(NoNameDay2, "LITU_B2", "fresh", "LITU", 39, 76)
+# LITU_B2_salt <- cleanData(UTDay2, "LITU_B2", "salt", "LITU", 39, 76)
+# 
+# #need to add in both LITU remaining cycles
+# 
+# LITU_A3_control <- cleanData(NoNameDay5, "LITU_A3", "controlA", "LITU", 1, 37)
+# LITU_A3_detached <- cleanData(PNNLDay5, "LITU_A3", "detached", "LITU", 1, 38)
+# LITU_A3_bucket <- cleanData(UTDay5, "LITU_A3", "bucket", "LITU", 1, 38)
+# 
+# LITU_B3_control <- cleanData(PNNLDay4, "LITU_B3", "controlB", "LITU", 75, 111)
+# LITU_B3_fresh <- cleanData(NoNameDay4, "LITU_B3", "fresh", "LITU", 77, 114)
+# LITU_B3_salt <- cleanData(UTDay4, "LITU_B3", "salt", "LITU", 77, 114)
+# 
+# 
+# #FAGR
+# FAGR_A1_control <- cleanData(PNNLDay1, "FAGR_A1", "controlA", "FAGR", 79, 116)
+# FAGR_A1_detached <- cleanData(UTDay1, "FAGR_A1", "detached", "FAGR", 79, 116)
+# FAGR_A1_bucket <- cleanData(NoNameDay1, "FAGR_A1", "bucket", "FAGR", 80, 117)
+# 
+# FAGR_B1_control <- cleanData(PNNLDay2, "FAGR_B1", "controlB", "FAGR", 76, 112)
+# FAGR_B1_fresh <- cleanData(NoNameDay2, "FAGR_B1", "fresh", "FAGR", 77, 114)
+# FAGR_B1_salt <- cleanData(UTDay2, "FAGR_B1", "salt", "FAGR", 77, 114)
+# 
+# FAGR_A2_control <- cleanData(NoNameDay3, "FAGR_A2", "controlA", "FAGR", 1, 37)
+# FAGR_A2_detached <- cleanData(UTDay3, "FAGR_A2", "detached", "FAGR", 1, 38)
+# FAGR_A2_bucket <- cleanData(PNNLDay3, "FAGR_A2", "bucket", "FAGR", 1, 38)
+# 
+# FAGR_B2_control <- cleanData(NoNameDay3, "FAGR_B2", "controlB", "FAGR", 38, 74)
+# FAGR_B2_fresh <- cleanData(PNNLDay3, "FAGR_B2", "fresh", "FAGR", 39, 76)
+# FAGR_B2_salt <- cleanData(UTDay3, "FAGR_B2", "salt", "FAGR", 39, 76)
+# 
+# FAGR_A3_control <- cleanData(NoNameDay4, "FAGR_A3", "controlA", "FAGR", 1, 37)
+# FAGR_A3_detached <- cleanData(UTDay4, "FAGR_A3", "detached", "FAGR", 1, 38)
+# FAGR_A3_bucket <- cleanData(PNNLDay4, "FAGR_A3", "bucket", "FAGR", 1, 38)
+# 
+# FAGR_B3_control <- cleanData(NoNameDay4, "FAGR_B3", "controlB", "FAGR", 38, 74)
+# FAGR_B3_fresh <- cleanData(PNNLDay4, "FAGR_B3", "fresh", "FAGR", 39, 76)
+# FAGR_B3_salt <- cleanData(UTDay4, "FAGR_B3", "salt", "FAGR", 39, 76)
+# 
+# 
+# 
+# ACRU_B2_control <- cleanData(UTDay8, "ACRU_B2", "controlB", "ACRU", 1, 38)
+# ACRU_A3_control <- cleanData(UTDay8, "ACRU_A3", "controlA", "ACRU", 39, 76)
+# 
+# ACRU_B2_fresh <- cleanData(NoNameDay8, "ACRU_B2", "fresh", "ACRU", 1, 38)
+# ACRU_A3_bucket <- cleanData(NoNameDay8, "ACRU_B2", "bucket", "ACRU", 39, 76)
+>>>>>>> Stashed changes
 
 ```
 
@@ -148,6 +361,89 @@ FAGR_B3_salt <- cleanData(UTDay4, "FAGR_B3", "salt", "FAGR", 39, 76)
 ideas: 
 can i have it so this page shows a dropdown menu OR a "enter what you want to see" ?
 
+<<<<<<< Updated upstream
+=======
+## with K: 
+```{r k graphs, include = FALSE}
+
+###
+### K chunk from August 12th meeting
+###
+
+#cleaning data step first (so we only have to do it once)
+cleaned_all %>%
+  filter(! is.na(cleaned_all$cycle),
+         A < 12) -> data
+
+#making means dataframe for plotting
+data %>%
+  group_by(species, logNum, treatment, cycle) %>%
+  summarize(A_mean = mean(A),
+            A_sd = sd(A),
+            gsw_mean = mean(gsw),
+            gsw_sd = sd(gsw)) -> clean_means
+
+#making rolled timeseries dataframe for plotting
+data %>%
+  group_by(species, treatment, cycle, replicate) %>%
+  arrange(logNum) %>%
+  mutate(A_roll = zoo::rollmean(A, k = 3, align = "left", fill = NA),
+         gsw_roll = zoo::rollmean(gsw, k = 3, align = "left", fill = NA)) -> rolled
+
+#and lastly, making an average of the rolled values for plotting
+#may decide later that any or all of these are not useful
+rolled %>%
+  ungroup() %>%
+  group_by(species, logNum, treatment, cycle) %>%
+  summarize(A_mean = mean(A_roll),
+            A_sd = sd(A_roll),
+            gsw_mean = mean(gsw_roll),
+            gsw_sd = sd(gsw_roll)) -> rolled_means
+
+#a half-decent plot with errorbars
+ggplot() + geom_line(data = rolled_means, aes(logNum, A_mean, color = treatment),
+                     linewidth = 1.25) + 
+  geom_point(data = clean_means, aes(logNum, A_mean, color = treatment), alpha = 0.5) + 
+  geom_errorbar(data = clean_means, aes(x = logNum, ymin = A_mean - A_sd, ymax = A_mean + A_sd,
+                                       color = treatment), alpha = 0.3) +
+  geom_hline(yintercept = 0, color = 'red') +
+  facet_grid(species ~ cycle, scales = "free_y") + theme_bw()
+
+#K skipped this
+# cleaned_all %>%
+#  filter(!is.na(cycle),
+#         replicate = 1) %>%
+# ggplot(aes(logNum, gsw, color = treatment)) +
+#   geom_point() + geom_line() + facet_grid(species ~ cycle, scales = "free_y") +
+#   ggtitle("Example Stomatal Conductance Panel")
+
+
+#a simple test of bucket effect
+
+#isolate data for testing effect
+ data %>%
+  ungroup() %>%
+  group_by(treatment, species, replicate) %>%
+  filter(cycle == "A",
+         treatment != "Detached",
+         logNum < 26 & logNum > 14) %>%
+  summarize(A_mean = mean(A),
+            gsw_mean = mean(gsw)) -> simple_bucket_test
+
+#Effect on photosynthetic rate
+simple_bucket1 <- aov(A_mean ~ treatment * species,
+                    data = simple_bucket_test) 
+summary(simple_bucket1)
+
+
+#Effect on stomatal conductance
+simple_bucket2 <- aov(gsw_mean ~ treatment * species,
+                    data = simple_bucket_test) 
+summary(simple_bucket2)
+
+```
+
+>>>>>>> Stashed changes
 ## one leaf: 
 ```{r graph one sample, echo=FALSE} 
 #Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
