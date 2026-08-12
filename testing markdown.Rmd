@@ -59,7 +59,7 @@ library(dplyr)
 library(tidyverse)
 ```
 
-```{r kendal's work for reference, include = FALSE}
+```{r post-kendal meeting work, include = FALSE}
 
 #KAM tries to read in data using metadata sheet
 data_dir <- "Data"
@@ -74,7 +74,7 @@ csv_list <- list.files(
 )
 
 #this is my function just cleaned!
-cleanData <- function(dataSheet, cycleAorB, cycleType, spp, obsStart, obsEnd, file_name) {
+cleanData <- function(dataSheet, IRGAName, cycleAorB, cycleType, spp, obsStart, obsEnd, file_name) {
   dataSheet %>%
     filter(between(obs, obsStart, obsEnd)) %>%
     mutate(
@@ -84,7 +84,7 @@ cleanData <- function(dataSheet, cycleAorB, cycleType, spp, obsStart, obsEnd, fi
       species  = spp,
       File     = file_name
     ) %>%
-    select(date, species, cycle, treatment, logNum, A, gsw, Ci)
+    select(date, IRGAName, species, cycle, treatment, logNum, A, gsw, Ci)
   #add additional columns above if more data is desired from licor output
 }
 
@@ -107,13 +107,14 @@ read_and_clean_all <- function(metadata, data_dir = "Data") {
       
       # Apply cleaning based on metadata fields
       cleanData(
-        dataSheet   = raw,
-        cycleAorB   = Cycle,       # use the metadata "Cycle" (A/B/etc.)
-        cycleType   = Treatment,   # use the metadata "Treatment"
-        spp         = Species,     # use the metadata "Species"
-        obsStart    = Start,
-        obsEnd      = End,
-        file_name   = File
+        dataSheet  = raw,
+        IRGAName   = Instrument,  # use the metadata "Instrument" (PNNL/NoName/UT)
+        cycleAorB  = Cycle,       # use the metadata "Cycle" (A/B/etc.)
+        cycleType  = Treatment,   # use the metadata "Treatment"
+        spp        = Species,     # use the metadata "Species"
+        obsStart   = Start,
+        obsEnd     = End,
+        file_name  = File
       )
       
     })
@@ -132,14 +133,22 @@ glimpse(cleaned_all)
 #my Qs: how to get it to know which columns to subtract from?
 
 
+#i have an outlier- i hiiiiighly doubt an ACRU can reach A of 16. how to filter?
+##or will avging filter for me?
+
+
+
+
 ggplot(data = subset(cleaned_all, !is.na(cycle)), aes(logNum, A, color = treatment)) +
-  #geom_point() + 
-  geom_line(aes(alpha = 0.5)) + facet_grid(species ~ cycle) + #what is ~ doing?
+  geom_point(aes(alpha = 0.5)) +
+  geom_line(aes(alpha = 0.5)) + facet_grid(species ~ cycle, scales = "free_y") + #what is ~ doing?
   ggtitle("Example Assimilation Panel")
 
 ggplot(subset(cleaned_all, !is.na(cycle)), aes(logNum, gsw, color = treatment)) +
-  geom_point() + geom_line() + facet_grid(species ~ cycle) +
+  geom_point() + geom_line() + facet_grid(species ~ cycle, scales = "free_y") +
   ggtitle("Example Stomatal Conductance Panel")
+
+
 
 relative <- cleaned_all %>%
   group_by(species, treatment, cycle) %>%
@@ -152,18 +161,18 @@ relative <- cleaned_all %>%
 # add to this summarize statement (can also do sd, counts, etc)
 # summarize(mean_A = mean(A_rel))
 
-ggplot(relative, aes(logNum, A_rel, color = treatment)) +
+ggplot(subset(relative,!is.na(cycle)), aes(logNum, A_rel, color = treatment)) +
   geom_point() + geom_line() + facet_grid(species ~ cycle) +
   ggtitle("Example Assimilation Panel")
 
-ggplot(relative, aes(logNum, gsw_rel, color = treatment)) +
+ggplot(subset(relative,!is.na(cycle)), aes(logNum, gsw_rel, color = treatment)) +
   geom_point() + geom_line() + facet_grid(species ~ cycle) +
   ggtitle("Example Stomatal Conductance Panel")
 
 
 ```
 
-```{r import data, include = FALSE}
+```{r import data OLD, include = FALSE}
 UTDay1 <- read.csv("2026-07-21_UT.csv") #LITU1 detached, LITU1 salt, FAGR1 detached
 NoNameDay1 <- read.csv("2026-07-21_NoName.csv") #LITU1 bucket, LITU1 fresh, FAGR1 bucket
 PNNLDay1 <- read.csv("2026-07-21 PNNL Day 1.csv") #LITU1 control A, LITU1 control B, FAGR1 control A
@@ -185,7 +194,7 @@ UTDay5 <- read.csv("2026-07-30 ut day 5.csv") #LITU3 bucket
 PNNLDay5 <- read.csv("2026-07-30 pnnl day 5.csv") #LITU3 detached
 ```
 
-```{r seperate into cycles}
+```{r seperate into cycles OLD, include = FALSE}
 #could i make this a function?? does r do functions???
 #I MADE IT A FUNCTION!!! (it works!!) YAY!!
 cleanData <- function(dataSheet, cycleNumber, cycleType, spp, obsStart, obsEnd) {
