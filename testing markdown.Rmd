@@ -74,7 +74,7 @@ csv_list <- list.files(
 )
 
 #this is my function just cleaned!
-cleanData <- function(dataSheet, IRGAName, cycleAorB, cycleType, spp, obsStart, obsEnd, file_name) {
+cleanData <- function(dataSheet, IRGAName, cycleAorB, cycleType, spp, obsStart, obsEnd, file_name, replicate) {
   dataSheet %>%
     filter(between(obs, obsStart, obsEnd)) %>%
     mutate(
@@ -82,9 +82,11 @@ cleanData <- function(dataSheet, IRGAName, cycleAorB, cycleType, spp, obsStart, 
       cycle    = cycleAorB,
       treatment = cycleType,
       species  = spp,
-      File     = file_name
+      File     = file_name,
+      IRGAName = IRGAName,
+      replicate = replicate
     ) %>%
-    select(date, IRGAName, species, cycle, treatment, logNum, A, gsw, Ci)
+    select(date, IRGAName, species, cycle, treatment, replicate, logNum, A, gsw, Ci)
   #add additional columns above if more data is desired from licor output
 }
 
@@ -114,7 +116,8 @@ read_and_clean_all <- function(metadata, data_dir = "Data") {
         spp        = Species,     # use the metadata "Species"
         obsStart   = Start,
         obsEnd     = End,
-        file_name  = File
+        file_name  = File,
+        replicate  = Replicate    #use the metadata "Replicate"
       )
       
     })
@@ -132,22 +135,25 @@ glimpse(cleaned_all)
   #subtract that value from each A or gsw value in respective rows
 #my Qs: how to get it to know which columns to subtract from?
 
+cleanedAdjustedAll = cleaned_all |> 
+  #blankA = mean(#IRGA A col where cycle = Blank)
+  #blankGSW = mean(#IRGA gsw col where cycle = Blank)
+  #group_by(IRGAName)
+    mutate(adjA = A - blankA) #subtract blankA from all A rows
+    mutate(adjGSW = gsw - blankGSW)#subtract blankGSW from all gsw rows
+  #}
 
-#i have an outlier- i hiiiiighly doubt an ACRU can reach A of 16. how to filter?
-##or will avging filter for me?
 
-
-
-
-ggplot(data = subset(cleaned_all, !is.na(cycle)), aes(logNum, A, color = treatment)) +
-  geom_point(aes(alpha = 0.5)) +
-  geom_line(aes(alpha = 0.5)) + facet_grid(species ~ cycle, scales = "free_y") + #what is ~ doing?
-  ggtitle("Example Assimilation Panel")
-
-ggplot(subset(cleaned_all, !is.na(cycle)), aes(logNum, gsw, color = treatment)) +
-  geom_point() + geom_line() + facet_grid(species ~ cycle, scales = "free_y") +
-  ggtitle("Example Stomatal Conductance Panel")
-
+#the one that would tell when/if it reaches 20% decrease
+placeholderName = function(percent, ){
+  cleaned_all |> 
+    group_by(species, treatment, cycle, replicate) %>%
+    arrange(logNum) |> 
+      #for the cycle, iterate one index at a time.
+      #if there are three consecutive "fail" at a time, return first index of fail
+    
+  #return logNum where first true if true, else return NA
+}
 
 
 relative <- cleaned_all %>%
@@ -160,15 +166,6 @@ relative <- cleaned_all %>%
 #%>% to calculate means of relative assmilation and stomatal conductance
 # add to this summarize statement (can also do sd, counts, etc)
 # summarize(mean_A = mean(A_rel))
-
-ggplot(subset(relative,!is.na(cycle)), aes(logNum, A_rel, color = treatment)) +
-  geom_point() + geom_line() + facet_grid(species ~ cycle) +
-  ggtitle("Example Assimilation Panel")
-
-ggplot(subset(relative,!is.na(cycle)), aes(logNum, gsw_rel, color = treatment)) +
-  geom_point() + geom_line() + facet_grid(species ~ cycle) +
-  ggtitle("Example Stomatal Conductance Panel")
-
 
 ```
 
@@ -192,6 +189,9 @@ PNNLDay4 <- read.csv("2026-07-29 PNNL Day 4.csv") #FAGR3 controlA,B, LITU3 contr
 NoNameDay5 <- read.csv("2026-07-30 noname day 5.csv") #LITU3 controlA
 UTDay5 <- read.csv("2026-07-30 ut day 5.csv") #LITU3 bucket
 PNNLDay5 <- read.csv("2026-07-30 pnnl day 5.csv") #LITU3 detached
+
+UTDay8 <- read.csv("data/2026-08-11 UT Day 8.csv") #controls for ACRU2B/ACRU3A
+NoNameDay8 <- read.csv("data/2026-08-11 NoName Day 8.csv") #fresh and bucket
 ```
 
 ```{r seperate into cycles OLD, include = FALSE}
@@ -262,12 +262,59 @@ FAGR_B3_control <- cleanData(NoNameDay4, "FAGR_B3", "controlB", "FAGR", 38, 74)
 FAGR_B3_fresh <- cleanData(PNNLDay4, "FAGR_B3", "fresh", "FAGR", 39, 76)
 FAGR_B3_salt <- cleanData(UTDay4, "FAGR_B3", "salt", "FAGR", 39, 76)
 
+
+
+ACRU_B2_control <- cleanData(UTDay8, "ACRU_B2", "controlB", "ACRU", 1, 38)
+ACRU_A3_control <- cleanData(UTDay8, "ACRU_A3", "controlA", "ACRU", 39, 76)
+
+ACRU_B2_fresh <- cleanData(NoNameDay8, "ACRU_B2", "fresh", "ACRU", 1, 38)
+ACRU_A3_bucket <- cleanData(NoNameDay8, "ACRU_B2", "bucket", "ACRU", 39, 76)
+
 ```
 
 # Graphs
-
 ideas: 
 can i have it so this page shows a dropdown menu OR a "enter what you want to see" ?
+
+## with K: 
+```{r k graphs, include = FALSE}
+#NEEDS TO ADJUST: 
+##very hard to read these graphs! too bulky lines, overlap
+##can i color-code the lines? (detached = red, control = green, bucket = cyan?, salt = yellow, fresh = blue)
+
+
+
+
+#make sure to rename with adj variable data set
+ggplot(data = subset(cleaned_all, !is.na(cycle)), aes(logNum, A, color = treatment)) +
+  geom_point(aes(alpha = 0.5)) +
+  geom_line(aes(alpha = 0.5)) + facet_grid(species ~ cycle, scales = "free_y") + #~ creates the grid row/col
+  ggtitle("Example Assimilation Panel")
+
+ggplot(subset(cleaned_all, !is.na(cycle)), aes(logNum, gsw, color = treatment)) +
+  geom_point() + geom_line() + facet_grid(species ~ cycle, scales = "free_y") +
+  ggtitle("Example Stomatal Conductance Panel")
+
+
+
+
+
+ggplot(subset(relative,!is.na(cycle)), aes(logNum, A_rel, color = treatment)) +
+  geom_point() + geom_line() + facet_grid(species ~ cycle) +
+  ggtitle("Example Assimilation Panel")
+
+
+#ggplot(subset(relative,!is.na(cycle)), aes(logNum, A_rel, color = treatment)) +
+ # geom_point() + geom_line() + facet_grid(species ~ cycle) +
+  #ggtitle("Example Assimilation Panel")
+#want to make one to exclude acru just to see
+
+
+ggplot(subset(relative,!is.na(cycle)), aes(logNum, gsw_rel, color = treatment)) +
+  geom_point() + geom_line() + facet_grid(species ~ cycle, scales = "free_y") +
+  ggtitle("Example Stomatal Conductance Panel")
+
+```
 
 ## one leaf: 
 ```{r graph one sample, echo=FALSE} 
@@ -287,6 +334,19 @@ plotControl1 <- plotOneLeaf(control1)
 plotControl1
 
 plotOneLeaf(control2)
+
+
+ggplot()+
+   # geom_line(data = ACRU_A3_control, aes(x = logNum, y = A, color = cycle)) +
+   # geom_line(data = ACRU_B2_control, aes(x = logNum, y = A, color = cycle)) +
+    geom_line(data = ACRU_A3_bucket, aes(x = logNum, y = A, color = cycle)) +
+    geom_line(data = ACRU_B2_fresh, aes(x = logNum, y = A, color = cycle)) +
+    geom_line(data = LITU_B2_fresh, aes(x = logNum, y = A, color = cycle)) +
+        geom_line(data = LITU, aes(x = logNum, y = A, color = cycle)) +
+
+
+    theme_bw() 
+    
 
 #from original code
 #ggplot(PNNLData, aes(x= logNum, y = A)) + geom_line() + geom_point() + ggtitle("Control over time (both cycles)")
