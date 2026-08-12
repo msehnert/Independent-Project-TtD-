@@ -118,47 +118,18 @@ glimpse(cleaned_all)
 
 #Clean/manip data
 
-#adjusted with blanks test?
-#needs to: 
-  #average UT, NoName, and PNNL's blanks to get adj. factor for A and gsw
-  #subtract that value from each A or gsw value in respective rows
-#my Qs: how to get it to know which columns to subtract from?
-
-#Confession: I did these in Excel because I didn't want to waste time doing it in R. I'll come back to this
-UTBlankA <- -0.046589049
-UTBlankgsw <- 0.000402572
-
-NoNameBlankA <- 0.720360211
-NoNmaeBlankgsw <- 0.002580013
+#adjust based on blanks data
+adjusted_all <- cleaned_all |> 
+  group_by(IRGAName, treatment) |> 
+    filter(treatment == "Blank") |> 
+      summarize(offsetA = mean(A),
+             offsetGSW = mean(gsw)) |>
+  ungroup() |> 
+  select(IRGAName, offsetA, offsetGSW) |> 
+  full_join(cleaned_all, adjustmentFactors, by = "IRGAName") |> 
+  mutate(adjA = A - offsetA,
+         adjGSW = gsw - offsetGSW)
   
-PNNLBlankA <-  0.28919685 
-PNNLBlankgsw <- -0.000260562
-
-#doing this manually, again will figure out how to do it together later
-
-#DOES NOT WORK
-cleaned_adjusted_all <- cleaned_all |> 
-  group_by(IRGAName) |> 
-  mutate(
-    if(IRGAName == "UT") {
-      adjA = A - UTBlankA +
-      adjGSW = gsw - UTBlankgsw
-    } else if (IRGAName == "NoName") {
-      adjA = A - NoNameBlankA +
-      adjGSW = gsw - NoNameBlankgsw
-    } else {
-      adjA = A - PNNLBlankA +
-      adjGSW = gsw - PNNLBlankgsw
-    }
-  )
-  
-  #blankA = mean(#IRGA A col where cycle = Blank)
-  #blankGSW = mean(#IRGA gsw col where cycle = Blank)
-  #group_by(IRGAName)
-    mutate(adjA = A - blankA) #subtract blankA from all A rows
-    mutate(adjGSW = gsw - blankGSW)#subtract blankGSW from all gsw rows
-  #}
-
 
 #the one that would tell when/if it reaches x% decrease
 placeholderName = function(percent){
@@ -383,8 +354,13 @@ NoNameDay5 <- read.csv("2026-07-30 noname day 5.csv") #LITU3 controlA
 UTDay5 <- read.csv("2026-07-30 ut day 5.csv") #LITU3 bucket
 PNNLDay5 <- read.csv("2026-07-30 pnnl day 5.csv") #LITU3 detached
 
-UTDay8 <- read.csv("data/2026-08-11 UT Day 8.csv") #controls for ACRU2B/ACRU3A
+UTDay7 <- read.csv("data/2026-08-10 UT Day 7.csv") #controls
+NoNameDay7 <- read.csv("data/2026-08-10 NoName Day 7.csv") #bucket fresh bucket
+PNNLDay7 <- read.csv("data/2026-08-10 PNNL Day 7.csv") #detached salt detached
+
+UTDay8 <- read.csv("data/2026-08-11 UT Day 8.csv") #controls
 NoNameDay8 <- read.csv("data/2026-08-11 NoName Day 8.csv") #fresh and bucket
+PNNLDay8 <- read.csv("data/2026-08-11 PNNL Day 8.csv")#salt detached salt
 ```
 ```{r seperate into cycles OLD, include = FALSE}
 #could i make this a function?? does r do functions???
@@ -456,11 +432,29 @@ FAGR_B3_salt <- cleanData(UTDay4, "FAGR_B3", "salt", "FAGR", 39, 76)
 
 
 
-ACRU_B2_control <- cleanData(UTDay8, "ACRU_B2", "controlB", "ACRU", 1, 38)
-ACRU_A3_control <- cleanData(UTDay8, "ACRU_A3", "controlA", "ACRU", 39, 76)
+ACRU_A1_control <- cleanData(UTDay7, "ACRU_A1", "controlA", "ACRU", 1, 38)
+ACRU_A1_detached <- cleanData(PNNLDay7, "ACRU_A1", "detached", "ACRU", 1, 38)
+ACRU_A1_bucket <- cleanData(NoNameDay7, "ACRU_A1", "bucket", "ACRU", 1, 38)
 
-ACRU_B2_fresh <- cleanData(NoNameDay8, "ACRU_B2", "fresh", "ACRU", 1, 38)
-ACRU_A3_bucket <- cleanData(NoNameDay8, "ACRU_B2", "bucket", "ACRU", 39, 76)
+ACRU_B1_control <- cleanData(UTDay7, "ACRU_B1", "controlB", "ACRU", 39, 76)
+ACRU_B1_fresh <- cleanData(NoNameDay7, "ACRU_B1", "fresh", "ACRU", 39, 76)
+ACRU_B1_salt <- cleanData(PNNLDay7, "ACRU_B1", "salt", "ACRU", 39, 76)
+
+ACRU_A2_control <- cleanData(UTDay7, "ACRU_A1", "controlA", "ACRU", 77, 114)
+ACRU_A2_detached <- cleanData(PNNLDay7, "ACRU_A1", "detached", "ACRU", 77, 114)
+ACRU_A2_bucket <- cleanData(NoNameDay7, "ACRU_A1", "bucket", "ACRU", 77, 114)
+
+ACRU_B2_control <- cleanData(UTDay8, "ACRU_B2", "controlB", "ACRU", 1,38)
+ACRU_B2_fresh <- cleanData(NoNameDay8, "ACRU_B2", "fresh", "ACRU", 1,38)
+ACRU_B2_salt <- cleanData(PNNLDay8, "ACRU_B2", "salt", "ACRU", 1,38)
+
+ACRU_A3_control <- cleanData(UTDay8, "ACRU_A3", "controlA", "ACRU", 39, 76)
+ACRU_A3_detached <- cleanData(PNNLDay8, "ACRU_A3", "detached", "ACRU", 39, 76)
+ACRU_A3_bucket <- cleanData(NoNameDay8, "ACRU_A3", "bucket", "ACRU", 39, 76)
+
+ACRU_B3_control <- cleanData(UTDay8, "ACRU_B3", "controlB", "ACRU", 77,114)
+ACRU_B3_salt <- cleanData(PNNLDay8, "ACRU_B3", "salt", "ACRU", 77,114
+
 
 ```
 
@@ -561,7 +555,15 @@ FAGR_B3_graphGSW <- plotOneCycleGSW(FAGR_B3_control, FAGR_B3_fresh, FAGR_B3_salt
 FAGR_B3_graphGSW
 
 #ACRU ----
+ACRU_A1_graphA <- plotOneCycleA(ACRU_B1_fresh, ACRU_B1_control, ACRU_B1_salt, "ACRU A1", -1, 7)
+ACRU_A1_graphA
+ACRU_A1_graphGSW <- plotOneCycleGSW(ACRU_B1_fresh, ACRU_B1_control, ACRU_B1_salt, "ACRU A1", -0.1, 0.1)
+ACRU_A1_graphGSW
 
+ACRU_B1_graphA <- plotOneCycleA(ACRU_A1_bucket, ACRU_A1_control, ACRU_A1_detached, "ACRU A1", -1, 7)
+ACRU_B1_graphA
+ACRU_B1_graphGSW <- plotOneCycleGSW(ACRU_A1_bucket, ACRU_A1_control, ACRU_A1_detached, "ACRU A1", -0.1, 0.1)
+ACRU_B1_graphGSW
 
 #----
 #from original code
