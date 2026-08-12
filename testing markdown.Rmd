@@ -131,16 +131,16 @@ adjusted_all <- cleaned_all |>
          adjGSW = gsw - offsetGSW)
   
 
-#the one that would tell when/if it reaches x% decrease
-placeholderName = function(percent){
-  cleaned_all |> 
-    group_by(species, treatment, cycle, replicate) %>%
-    arrange(logNum) #|> 
-      #for the cycle, iterate one index at a time.
-      #if there are three consecutive "fail" at a time, return first index of fail
-    
-  #return logNum where first true if true, else return NA
-}
+# #the one that would tell when/if it reaches x% decrease
+# placeholderName = function(percent){
+#   cleaned_all |> 
+#     group_by(species, treatment, cycle, replicate) %>%
+#     arrange(logNum) #|> 
+#       #for the cycle, iterate one index at a time.
+#       #if there are three consecutive "fail" at a time, return first index of fail
+#     
+#   #return logNum where first true if true, else return NA
+# }
 
 
 relative <- cleaned_all %>%
@@ -272,6 +272,125 @@ ggplot(subset(relative,!is.na(cycle)), aes(logNum, gsw_rel, color = treatment)) 
   geom_point() + geom_line() + facet_grid(species ~ cycle, scales = "free_y") +
   ggtitle("Example Stomatal Conductance Panel")
 ```
+
+```{r all data graphs but with adjusted values (it broke the first time), include = FALSE}
+###
+### K chunk from August 12th meeting
+###
+
+#cleaning data step first (so we only have to do it once)
+data <- adjusted_all %>%
+  filter(!is.na(adjusted_all$cycle),
+         A < 12) #remove outliers in A
+#(i like having the new var name out front to easily find it later!)
+
+#making means data frame for plotting
+#this is making a mean/stdev for each cycle log 
+##aka averaging all ACRU fresh log 1s
+clean_means <- data %>%
+  group_by(species, logNum, treatment, cycle) %>%
+  summarize(A_mean = mean(adjA),
+            A_sd = sd(adjA),
+            gsw_mean = mean(adjGSW),
+            gsw_sd = sd(adjGSW)) |> 
+  ungroup() #-> clean_means
+#does this ever get called??? <- no, it was a remnant from first graph attempt
+
+
+#making rolled time series data frame for plotting
+#rolled average = plots the average of this and the next two (n=3), smooths curve
+rolled <- data %>%
+  group_by(species, treatment, cycle, replicate) %>%
+  arrange(logNum) %>%
+  mutate(A_roll = rollmean(adjA, k = 3, align = "left", fill = NA),
+         gsw_roll = rollmean(adjGSW, k = 3, align = "left", fill = NA)) # -> rolled
+
+#and lastly, making an average of the rolled values for plotting
+#may decide later that any or all of these are not useful
+rolled_means <- rolled %>%
+  ungroup() %>%
+  group_by(species, logNum, treatment, cycle) %>%
+  summarize(A_mean = mean(A_roll),
+            A_sd = sd(A_roll),
+            gsw_mean = mean(gsw_roll),
+            gsw_sd = sd(gsw_roll)) #-> rolled_means
+
+
+#a half-decent plot with errorbars
+ggplot() + geom_line(data = rolled_means, aes(logNum, A_mean, color = treatment),
+                     linewidth = 1.25) + 
+  geom_point(data = clean_means, aes(logNum, A_mean, color = treatment), alpha = 0.5) + 
+  geom_errorbar(data = clean_means, aes(x = logNum, ymin = A_mean - A_sd, ymax = A_mean + A_sd,
+                                       color = treatment), alpha = 0.3) +
+  geom_hline(yintercept = 0, color = 'red') + #adds red line on 0
+  facet_grid(species ~ cycle, scales = "free_y") + theme_bw()
+
+#attempt to graph with ribbons instead of lines
+#i don't really like this one- too much going on!
+ggplot() + geom_line(data = rolled_means, aes(logNum, A_mean, color = treatment),
+                     linewidth = 1.25) + 
+  geom_point(data = clean_means, aes(logNum, A_mean, color = treatment), alpha = 0.5) + 
+  geom_ribbon(data = clean_means, aes(x = logNum, ymin = A_mean - A_sd, ymax = A_mean + A_sd,
+                                       color = treatment, fill = treatment), alpha = 0.2, color = NA) +
+  geom_hline(yintercept = 0, color = 'red') +
+  facet_grid(species ~ cycle, scales = "free_y") + theme_bw()
+
+
+#same as above, but with gsw
+ggplot() + geom_line(data = rolled_means, aes(logNum, gsw_mean, color = treatment),
+                     linewidth = 1.25) + 
+  geom_point(data = clean_means, aes(logNum, gsw_mean, color = treatment), alpha = 0.5) + 
+  geom_errorbar(data = clean_means, aes(x = logNum, ymin = gsw_mean - gsw_sd, ymax = gsw_mean + gsw_sd,
+                                       color = treatment), alpha = 0.3) +
+  geom_hline(yintercept = 0, color = 'red') + #adds red line on 0
+  facet_grid(species ~ cycle, scales = "free_y") + theme_bw()
+
+ggplot() + geom_line(data = rolled_means, aes(logNum, gsw_mean, color = treatment),
+                     linewidth = 1.25) + 
+  geom_point(data = clean_means, aes(logNum, gsw_mean, color = treatment), alpha = 0.5) + 
+  geom_ribbon(data = clean_means, aes(x = logNum, ymin = gsw_mean - gsw_sd, ymax = gsw_mean + gsw_sd,
+                                      color = treatment, fill = treatment), alpha = 0.3, color = NA) +
+  geom_hline(yintercept = 0, color = 'red') + #adds red line on 0
+  facet_grid(species ~ cycle)  + theme_bw()
+
+
+#K skipped this
+# cleaned_all %>%
+#  filter(!is.na(cycle),
+#         replicate = 1) %>%
+# ggplot(aes(logNum, gsw, color = treatment)) +
+#   geom_point() + geom_line() + facet_grid(species ~ cycle, scales = "free_y") +
+#   ggtitle("Example Stomatal Conductance Panel")
+
+
+
+#NEEDS TO ADJUST: 
+##can i color-code the lines? (detached = red, control = green, bucket = cyan?, salt = yellow, fresh = blue)
+
+
+
+#Prior graphs
+#make sure to rename with adj variable data set
+ggplot(data = subset(cleaned_all, !is.na(cycle)), aes(logNum, A, color = treatment)) +
+  geom_point(aes(alpha = 0.5)) +
+  geom_line(aes(alpha = 0.5)) + facet_grid(species ~ cycle, scales = "free_y") + #~ creates the grid row/col
+  ggtitle("Example Assimilation Panel")
+
+ggplot(subset(cleaned_all, !is.na(cycle)), aes(logNum, gsw, color = treatment)) +
+  geom_point() + geom_line() + facet_grid(species ~ cycle, scales = "free_y") +
+  ggtitle("Example Stomatal Conductance Panel")
+
+#these used "relative" data set from the original document
+ggplot(subset(relative,!is.na(cycle)), aes(logNum, A_rel, color = treatment)) +
+  geom_point() + geom_line() + facet_grid(species ~ cycle) +
+  ggtitle("Example Assimilation Panel")
+
+ggplot(subset(relative,!is.na(cycle)), aes(logNum, gsw_rel, color = treatment)) +
+  geom_point() + geom_line() + facet_grid(species ~ cycle, scales = "free_y") +
+  ggtitle("Example Stomatal Conductance Panel")
+```
+
+
 
 #Statistics
 ```{r Statistics, echo = FALSE}
