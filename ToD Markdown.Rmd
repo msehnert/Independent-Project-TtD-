@@ -25,27 +25,10 @@ Bucket *(snipped in a bucket of freshwater, no time delay)* |Fresh *(snipped in 
 Detached *(snipped without providing any water source)* |Salt *(snipped in a bucket of saltwater, ~1 min delay)*
 
 Each cycle runs for 75 minutes, logging data every 120 seconds. Cycles where a treatment is applied log one reading before the treatment.  
-
-
-# Code Output: 
-**This code:**  
- * inputs data from the instruments (as a .csv file)  
- * divides the data into the respective cycles based on log number  
- * adds a "cycle" identifier  
- * adds a "species" identifier  
- * adds a "logNum" identifier to start all cycles at time = 0, regardless of whether or not it was the first log of the day 
- * graphs data:   
-    + as a standalone reading  
-    + by cycle  
-    + [overall by species?]  
-    + [overall by cycle?]  
     
     
 #STEPS: 
 ##make some graphs of each individual relative data (this beech, etc) and the summarized relative data (all beech, etc)
-##add error bars (grey border) to the graph, make more readable
-
-##clunky way to do it: could you make column that's x% of original
 
 ```{r setup, include=FALSE} 
 knitr::opts_chunk$set(echo = TRUE) #this is from original markdown doc
@@ -132,7 +115,25 @@ adjusted_all <- cleaned_all |>
   
 
 # #the one that would tell when/if it reaches x% decrease
-# placeholderName = function(percent){
+placeholderName <- adjusted_all |> 
+  group_by(species, treatment, cycle) %>%
+  arrange(logNum) %>%
+  mutate(aCheck = first(A) * 0.8, #0.8 = 20% decrease
+         gswCheck = first(gsw) * 0.8) |> 
+  mutate(isLessA = FALSE, isLessGSW = FALSE) #|> 
+  # for((need to translate this, but i = 0; i < cycle.length, i++) {
+  #   if(aCheck > A) {aCheck = TRUE}
+  #   if(gswCheck > gsw) {gswCheck = TRUE}
+  # })
+  # for(i = 0; i < aCheck.length - 2, i++) {
+  #     if(aCheck[i] == TRUE && aCheck[i+1] == TRUE && aCheck[i+2] == TRUE) {
+  #       return i
+  #     } +
+  #     if(gswCheck[i] == TRUE && gswCheck[i+1] == TRUE && gswCheck[i+2] == TRUE){
+  #       return i
+  #     }
+  # }
+  
 #   cleaned_all |> 
 #     group_by(species, treatment, cycle, replicate) %>%
 #     arrange(logNum) #|> 
@@ -153,6 +154,22 @@ relative <- cleaned_all %>%
 #%>% to calculate means of relative assmilation and stomatal conductance
 # add to this summarize statement (can also do sd, counts, etc)
 # summarize(mean_A = mean(A_rel))
+#did this below!
+
+relativeAdjusted <- adjusted_all |> 
+  group_by(species, treatment, cycle) |> 
+  arrange(logNum) |> 
+  mutate(A0 = first(adjA),
+         gsw0 = first(adjA),
+         A_rel = adjA/A0,
+         gsw_rel = adjGSW/gsw0) |> 
+  ungroup() |> 
+  filter(!is.na(cycle), A < 12) |> 
+  group_by(species, logNum, treatment, cycle) |> 
+  summarize(A_mean = mean(A_rel),
+            A_sd = sd(A_rel),
+            gsw_mean = mean(gsw_rel),
+            gsw_sd = sd(gsw_rel))
 
 ```
 
@@ -389,7 +406,6 @@ ggplot(subset(relative,!is.na(cycle)), aes(logNum, gsw_rel, color = treatment)) 
   geom_point() + geom_line() + facet_grid(species ~ cycle, scales = "free_y") +
   ggtitle("Example Stomatal Conductance Panel")
 ```
-
 
 
 #Statistics
