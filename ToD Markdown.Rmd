@@ -114,35 +114,6 @@ adjusted_all <- cleaned_all |>
          adjGSW = gsw - offsetGSW)
   
 
-# #the one that would tell when/if it reaches x% decrease
-placeholderName <- adjusted_all |> 
-  group_by(species, treatment, cycle) %>%
-  arrange(logNum) %>%
-  mutate(aCheck = first(A) * 0.8, #0.8 = 20% decrease
-         gswCheck = first(gsw) * 0.8) |> 
-  mutate(isLessA = FALSE, isLessGSW = FALSE) #|> 
-  # for((need to translate this, but i = 0; i < cycle.length, i++) {
-  #   if(aCheck > A) {aCheck = TRUE}
-  #   if(gswCheck > gsw) {gswCheck = TRUE}
-  # })
-  # for(i = 0; i < aCheck.length - 2, i++) {
-  #     if(aCheck[i] == TRUE && aCheck[i+1] == TRUE && aCheck[i+2] == TRUE) {
-  #       return i
-  #     } +
-  #     if(gswCheck[i] == TRUE && gswCheck[i+1] == TRUE && gswCheck[i+2] == TRUE){
-  #       return i
-  #     }
-  # }
-  
-#   cleaned_all |> 
-#     group_by(species, treatment, cycle, replicate) %>%
-#     arrange(logNum) #|> 
-#       #for the cycle, iterate one index at a time.
-#       #if there are three consecutive "fail" at a time, return first index of fail
-#     
-#   #return logNum where first true if true, else return NA
-# }
-
 
 relative <- cleaned_all %>%
   group_by(species, treatment, cycle) %>%
@@ -217,7 +188,7 @@ rolled_means <- rolled %>%
             gsw_sd = sd(gsw_roll)) #-> rolled_means
 
 
-#a half-decent plot with errorbars
+#a half-decent plot with errorbars ----
 ggplot() + geom_line(data = rolled_means, aes(logNum, A_mean, color = treatment),
                      linewidth = 1.25) + 
   geom_point(data = clean_means, aes(logNum, A_mean, color = treatment), alpha = 0.5) + 
@@ -269,7 +240,7 @@ ggplot() + geom_line(data = rolled_means, aes(logNum, gsw_mean, color = treatmen
 
 
 
-#Prior graphs
+#Prior graphs----
 #make sure to rename with adj variable data set
 ggplot(data = subset(cleaned_all, !is.na(cycle)), aes(logNum, A, color = treatment)) +
   geom_point(aes(alpha = 0.5)) +
@@ -290,7 +261,7 @@ ggplot(subset(relative,!is.na(cycle)), aes(logNum, gsw_rel, color = treatment)) 
   ggtitle("Example Stomatal Conductance Panel")
 ```
 
-```{r all data graphs but with adjusted values (it broke the first time), include = FALSE}
+```{r all data graphs but with adjusted values USE THIS ONE!!, include = FALSE}
 ###
 ### K chunk from August 12th meeting
 ###
@@ -333,7 +304,14 @@ rolled_means <- rolled %>%
             gsw_sd = sd(gsw_roll)) #-> rolled_means
 
 
-#a half-decent plot with errorbars
+#Graphs ----
+
+#NEEDS TO ADJUST: 
+##can i color-code the lines? (detached = red, control = green, bucket = cyan?, salt = yellow, fresh = blue)
+
+
+#A
+#Error bars:
 ggplot() + geom_line(data = rolled_means, aes(logNum, A_mean, color = treatment),
                      linewidth = 1.25) + 
   geom_point(data = clean_means, aes(logNum, A_mean, color = treatment), alpha = 0.5) + 
@@ -343,32 +321,36 @@ ggplot() + geom_line(data = rolled_means, aes(logNum, A_mean, color = treatment)
   facet_grid(species ~ cycle, scales = "free_y") + theme_bw()
 
 #attempt to graph with ribbons instead of lines
-#i don't really like this one- too much going on!
 ggplot() + geom_line(data = rolled_means, aes(logNum, A_mean, color = treatment),
                      linewidth = 1.25) + 
   geom_point(data = clean_means, aes(logNum, A_mean, color = treatment), alpha = 0.5) + 
   geom_ribbon(data = clean_means, aes(x = logNum, ymin = A_mean - A_sd, ymax = A_mean + A_sd,
-                                       color = treatment, fill = treatment), alpha = 0.2, color = NA) +
+                                       color = treatment, fill = treatment), alpha = 0.15, color = NA) +
   geom_hline(yintercept = 0, color = 'red') +
-  facet_grid(species ~ cycle, scales = "free_y") + theme_bw()
+  facet_grid(species ~ cycle, scales = "free_y") + theme_bw()  +
+  labs(x = "Log Number", y = "A") 
 
 
 #same as above, but with gsw
+#Error Bars: 
 ggplot() + geom_line(data = rolled_means, aes(logNum, gsw_mean, color = treatment),
                      linewidth = 1.25) + 
   geom_point(data = clean_means, aes(logNum, gsw_mean, color = treatment), alpha = 0.5) + 
   geom_errorbar(data = clean_means, aes(x = logNum, ymin = gsw_mean - gsw_sd, ymax = gsw_mean + gsw_sd,
                                        color = treatment), alpha = 0.3) +
   geom_hline(yintercept = 0, color = 'red') + #adds red line on 0
-  facet_grid(species ~ cycle, scales = "free_y") + theme_bw()
+  facet_grid(species ~ cycle, scales = "free_y") + theme_bw() +
+  labs(x = "Log Number", y = "gsw") 
 
+#Shaded Reigon:
 ggplot() + geom_line(data = rolled_means, aes(logNum, gsw_mean, color = treatment),
                      linewidth = 1.25) + 
   geom_point(data = clean_means, aes(logNum, gsw_mean, color = treatment), alpha = 0.5) + 
   geom_ribbon(data = clean_means, aes(x = logNum, ymin = gsw_mean - gsw_sd, ymax = gsw_mean + gsw_sd,
-                                      color = treatment, fill = treatment), alpha = 0.3, color = NA) +
+                                      color = treatment, fill = treatment), alpha = 0.15, color = NA) +
   geom_hline(yintercept = 0, color = 'red') + #adds red line on 0
-  facet_grid(species ~ cycle)  + theme_bw()
+  facet_grid(species ~ cycle, scales = "free_y")  + theme_bw() + 
+  labs(x = "Log Number", y = "gsw") 
 
 
 #K skipped this
@@ -381,12 +363,11 @@ ggplot() + geom_line(data = rolled_means, aes(logNum, gsw_mean, color = treatmen
 
 
 
-#NEEDS TO ADJUST: 
-##can i color-code the lines? (detached = red, control = green, bucket = cyan?, salt = yellow, fresh = blue)
 
 
 
-#Prior graphs
+
+#Prior graphs ----
 #make sure to rename with adj variable data set
 ggplot(data = subset(cleaned_all, !is.na(cycle)), aes(logNum, A, color = treatment)) +
   geom_point(aes(alpha = 0.5)) +
@@ -453,6 +434,95 @@ summary(simpleDoubleBucketA)
 simpleDoubleBucketGSW <- aov(A_mean ~ treatment * species,
                              data = combinedCyclesData)
 summary(simpleDoubleBucketGSW)
+
+
+
+
+# #the one that would tell when/if it reaches x% decrease ATTEMPT 1 ----
+getTimeDecrease <- adjusted_all |> 
+  group_by(species, treatment, cycle) %>%
+  arrange(logNum) %>%
+  mutate(aCheck = first(adjA) * 0.8, #0.8 = 20% decrease
+         gswCheck = first(adjGSW) * 0.8) |> 
+  mutate(isLessA = FALSE, isLessGSW = FALSE)  
+#   loopFunction()
+#   #won't run because of pipe, but won't recognize variable if not piped
+#   #google search suggestion: run this as a function
+# 
+# loopFunction = function(){
+#   for(i in length(cycle)) { 
+#     if(aCheck[[i]] > adjA[[i]]) {aCheck[[i]] = TRUE}
+#     if(gswCheck[[i]] > adjgsw[[i]]) {gswCheck[[i]] = TRUE}
+#   }
+# }
+  # for((need to translate this, but i = 0; i < cycle.length, i++) {
+  #   if(aCheck > A) {aCheck = TRUE}
+  #   if(gswCheck > gsw) {gswCheck = TRUE}
+  # })
+  # for(i = 0; i < aCheck.length - 2, i++) {
+  #     if(aCheck[i] == TRUE && aCheck[i+1] == TRUE && aCheck[i+2] == TRUE) {
+  #       return i
+         # break
+  #     } +
+  #     if(gswCheck[i] == TRUE && gswCheck[i+1] == TRUE && gswCheck[i+2] == TRUE){
+  #       return i
+#         break
+  #     }
+  # }
+  
+#   cleaned_all |> 
+#     group_by(species, treatment, cycle, replicate) %>%
+#     arrange(logNum) #|> 
+#       #for the cycle, iterate one index at a time.
+#       #if there are three consecutive "fail" at a time, return first index of fail
+#     
+#   #return logNum where first true if true, else return NA
+# }
+
+
+#%decrease attempt 2 ----
+
+getTimeDecreaseCol <- function(percent) {
+  adjusted_all |> 
+  group_by(species, treatment, cycle) %>%
+  arrange(logNum) %>%
+  mutate(aCheck = adjA[1] * (1 - percent), #calculates x% left
+         gswCheck = adjGSW[1] * (1 - percent),
+         indexA = NA,
+         indexGSW = NA) 
+}
+decreaseData <- getTimeDecreaseCol(0.2)
+
+
+percentDecrease <- function(){
+  decreaseData |> 
+    group_by(species, treatment, cycle) |> 
+    arrange(logNum) |> 
+    findIndex()
+}
+test <- percentDecrease()
+
+findIndex <- function(data){
+  for(i in length(data$cycle)-2) {
+    if((data$adjA[i] < data$aCheck[i]) & (data$adjA[i+1] < data$aCheck[i+1]) & (data$adjA[i+2] < data$aCheck[i+2])) {
+      mutate(indexA = i)
+      break
+    }
+  } 
+  for(i in data$cycle(length)-2) {
+    if((data$adjGSW[i] < data$gswCheck[i]) & (data$adjGSW[i+1] < data$gswCheck[i+1]) & (data$adjGSW[i+2] < data$gswCheck[i+2])) {
+      mutate(indexGSW = i)
+      break
+    }
+  }
+}
+
+
+
+
+
+##idea: run through, figure out if it hits that mark
+###output = new data frame with species, treatment, cycle, when it hit OR NA
 
 
 ```
