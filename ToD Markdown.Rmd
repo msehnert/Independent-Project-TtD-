@@ -282,7 +282,7 @@ clean_means <- data %>%
             gsw_mean = mean(adjGSW),
             gsw_sd = sd(adjGSW)) |> 
   ungroup() #-> clean_means
-#does this ever get called??? <- no, it was a remnant from first graph attempt
+#does this ever get called??? <- yes, in a graph (lol)
 
 
 #making rolled time series data frame for plotting
@@ -360,6 +360,112 @@ ggplot() + geom_line(data = rolled_means, aes(logNum, gsw_mean, color = treatmen
 # ggplot(aes(logNum, gsw, color = treatment)) +
 #   geom_point() + geom_line() + facet_grid(species ~ cycle, scales = "free_y") +
 #   ggtitle("Example Stomatal Conductance Panel")
+
+
+
+#graphs that could be helpful when doing a presentation/out of curiousity ----
+
+#Plotting controls and freshwater tests together
+clean_meansCombined <- data %>%
+  group_by(species, logNum, treatment) %>%
+  filter(treatment != "Detached", treatment != "Salt") |> 
+  summarize(A_mean = mean(adjA),
+            A_sd = sd(adjA),
+            gsw_mean = mean(adjGSW),
+            gsw_sd = sd(adjGSW)) |> 
+  ungroup() |> 
+    mutate(across("treatment", str_replace, "Fresh", "1 Minute Delay"),
+         across("treatment", str_replace, "Bucket", "No Delay"))#-> clean_means
+
+#combined the rolling means functions into one. saved time
+combinedControls <- data |> 
+  ungroup() |>
+  group_by(treatment, species, logNum) |> 
+  filter(treatment != "Detached", treatment != "Salt") |> 
+  ungroup() |> 
+  group_by(species, treatment) |> 
+  mutate(A_roll = rollmean(adjA, k = 3, align = "left", fill = NA),
+         gsw_roll = rollmean(adjGSW, k = 3, align = "left", fill = NA)) |> 
+  ungroup() |> 
+  group_by(species, logNum, treatment) |> 
+  summarize(A_mean = mean(A_roll),
+            A_sd = sd(A_roll),
+            gsw_mean = mean(gsw_roll),
+            gsw_sd = mean(gsw_roll)) |> 
+  mutate(across("treatment", str_replace, "Fresh", "1 Minute Delay"),
+         across("treatment", str_replace, "Bucket", "No Delay"))
+
+
+#A
+ggplot() + geom_line(data = combinedControls, aes(logNum, A_mean, color = treatment),
+                     linewidth = 1.25) + 
+  geom_point(data = clean_meansCombined, aes(logNum, A_mean, color = treatment), alpha = 0.5) + 
+  geom_ribbon(data = clean_meansCombined, aes(x = logNum, ymin = A_mean - A_sd, ymax = A_mean + A_sd,
+                                       color = treatment, fill = treatment), alpha = 0.15, color = NA) +
+  geom_hline(yintercept = 0, color = 'red') +
+  facet_grid(rows = "species", scales = "free_y") + theme_bw()  +
+  labs(x = "Log Number", y = "A") 
+
+#gsw
+ggplot() + geom_line(data = combinedControls, aes(logNum, gsw_mean, color = treatment),
+                     linewidth = 1.25) + 
+  geom_point(data = clean_meansCombined, aes(logNum, gsw_mean, color = treatment), alpha = 0.5) + 
+  geom_ribbon(data = clean_meansCombined, aes(x = logNum, ymin = gsw_mean - gsw_sd, ymax = gsw_mean + gsw_sd,
+                                       color = treatment, fill = treatment), alpha = 0.15, color = NA) +
+  geom_hline(yintercept = 0, color = 'red') +
+  facet_grid(rows = "species", scales = "free_y") + theme_bw()  +
+  labs(x = "Log Number", y = "gsw") 
+
+
+
+
+
+clean_meansSaltDetached <- data %>%
+  group_by(species, logNum, treatment) %>%
+  filter(treatment != "Fresh", treatment != "Bucket") |> 
+  summarize(A_mean = mean(adjA),
+            A_sd = sd(adjA),
+            gsw_mean = mean(adjGSW),
+            gsw_sd = sd(adjGSW)) |> 
+  ungroup() 
+
+
+saltDetachedOnly <- data |> 
+  ungroup() |>
+  group_by(treatment, species, logNum) |> 
+  filter(treatment != "Fresh", treatment != "Bucket") |> 
+  ungroup() |> 
+  group_by(species, treatment) |> 
+  mutate(A_roll = rollmean(adjA, k = 3, align = "left", fill = NA),
+         gsw_roll = rollmean(adjGSW, k = 3, align = "left", fill = NA)) |> 
+  ungroup() |> 
+  group_by(species, logNum, treatment) |> 
+  summarize(A_mean = mean(A_roll),
+            A_sd = sd(A_roll),
+            gsw_mean = mean(gsw_roll),
+            gsw_sd = mean(gsw_roll))
+
+
+ggplot() + geom_line(data = saltDetachedOnly, aes(logNum, A_mean, color = treatment),
+                     linewidth = 1.25) + 
+  geom_point(data = clean_meansSaltDetached, aes(logNum, A_mean, color = treatment), alpha = 0.5) + 
+  geom_ribbon(data = clean_meansSaltDetached, aes(x = logNum, ymin = A_mean - A_sd, ymax = A_mean + A_sd,
+                                       color = treatment, fill = treatment), alpha = 0.15, color = NA) +
+  geom_hline(yintercept = 0, color = 'red') +
+  facet_grid(rows = "species", scales = "free_y") + theme_bw()  +
+  labs(x = "Log Number", y = "A") 
+
+#gsw
+ggplot() + geom_line(data = saltDetachedOnly, aes(logNum, gsw_mean, color = treatment),
+                     linewidth = 1.25) + 
+  geom_point(data = clean_meansSaltDetached, aes(logNum, gsw_mean, color = treatment), alpha = 0.5) + 
+  geom_ribbon(data = clean_meansSaltDetached, aes(x = logNum, ymin = gsw_mean - gsw_sd, ymax = gsw_mean + gsw_sd,
+                                       color = treatment, fill = treatment), alpha = 0.15, color = NA) +
+  geom_hline(yintercept = 0, color = 'red') +
+  facet_grid(rows = "species", scales = "free_y") + theme_bw()  +
+  labs(x = "Log Number", y = "gsw") 
+
+
 
 
 
@@ -494,31 +600,42 @@ getTimeDecreaseCol <- function(percent) {
 decreaseData <- getTimeDecreaseCol(0.2)
 
 
-percentDecrease <- function(){
-  decreaseData |> 
+percentDecrease <- function(dataIn){
+  dataIn |> 
     group_by(species, treatment, cycle) |> 
     arrange(logNum) |> 
-    findIndex()
+    findIndexA() 
+    #findIndexGSW()
 }
-test <- percentDecrease()
 
-findIndex <- function(data){
-  for(i in length(data$cycle)-2) {
-    if((data$adjA[i] < data$aCheck[i]) & (data$adjA[i+1] < data$aCheck[i+1]) & (data$adjA[i+2] < data$aCheck[i+2])) {
-      mutate(indexA = i)
-      break
-    }
-  } 
-  for(i in data$cycle(length)-2) {
-    if((data$adjGSW[i] < data$gswCheck[i]) & (data$adjGSW[i+1] < data$gswCheck[i+1]) & (data$adjGSW[i+2] < data$gswCheck[i+2])) {
-      mutate(indexGSW = i)
-      break
-    }
+
+findIndexA <- function(dataIn){
+  mutated = dataIn
+  for(i in length(dataIn$cycle) - 2){
+    if(dataIn$adjA[i] < dataIn$aCheck[i]) {
+      if(dataIn$adjA[i+1] < dataIn$aCheck[i+1]){
+       if(dataIn$adjA[i + 2] < dataIn$aCheck[i + 2]){
+      mutate(mutated, indexA = i)
+      return(mutated)
+      }
+     } 
+   }
+  }
+  return(mutated)
+}
+
+findIndexGSW <- function(dataIn){
+  mutated = dataIn
+  for(i in length(dataIn$cycle) - 2){
+    if(dataIn$adjGSW[i] < dataIn$gswCheck[i] & dataIn$adjGSW[i+1] < dataIn$gswCheck[i+1] & dataIn$adjGSW[i + 2] < dataIn$gswCheck[i + 2]) {
+      mutate(mutated, indexGSW = i)
+      return(mutated)
+    } 
   }
 }
 
 
-
+testing <- percentDecrease(decreaseData)
 
 
 ##idea: run through, figure out if it hits that mark
