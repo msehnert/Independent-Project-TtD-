@@ -128,7 +128,7 @@ relative <- cleaned_all %>%
 #did this below!
 
 relativeAdjusted <- adjusted_all |> 
-  group_by(species, treatment, cycle) |> 
+  group_by(species, treatment, cycle, replicate) |> 
   arrange(logNum) |> 
   mutate(A0 = first(adjA),
          gsw0 = first(adjA),
@@ -136,7 +136,7 @@ relativeAdjusted <- adjusted_all |>
          gsw_rel = adjGSW/gsw0) |> 
   ungroup() |> 
   filter(!is.na(cycle), A < 12) |> 
-  group_by(species, logNum, treatment, cycle) |> 
+  group_by(species, logNum, treatment, cycle, replicate) |> 
   summarize(A_mean = mean(A_rel),
             A_sd = sd(A_rel),
             gsw_mean = mean(gsw_rel),
@@ -272,6 +272,7 @@ data <- adjusted_all %>%
          A < 12) #remove outliers in A
 #(i like having the new var name out front to easily find it later!)
 
+
 #making means data frame for plotting
 #this is making a mean/stdev for each cycle log 
 ##aka averaging all ACRU fresh log 1s
@@ -285,6 +286,25 @@ clean_means <- data %>%
 #does this ever get called??? <- yes, in a graph (lol)
 
 
+#making rolled time series data frame for plotting
+#rolled average = plots the average of this and the next two (n=3), smooths curve
+rolled <- relativeAdjusted %>%
+  group_by(species, treatment, cycle, replicate) %>%
+  arrange(logNum) %>%
+  mutate(A_roll = rollmean(adjA, k = 3, align = "left", fill = NA),
+         gsw_roll = rollmean(adjGSW, k = 3, align = "left", fill = NA)) # -> rolled
+
+#and lastly, making an average of the rolled values for plotting
+#may decide later that any or all of these are not useful
+rolled_means <- rolled %>%
+  ungroup() %>%
+  group_by(species, logNum, treatment, cycle) %>%
+  summarize(A_mean = mean(A_roll),
+            A_sd = sd(A_roll),
+            gsw_mean = mean(gsw_roll),
+            gsw_sd = sd(gsw_roll)) #-> rolled_means
+
+##relative ver?
 #making rolled time series data frame for plotting
 #rolled average = plots the average of this and the next two (n=3), smooths curve
 rolled <- data %>%
@@ -467,6 +487,42 @@ ggplot() + geom_line(data = saltDetachedOnly, aes(logNum, gsw_mean, color = trea
 
 
 
+#bar graphs of beginning middle end HLAF DONE? ----
+
+begMidEnd <- clean_means |> 
+  ungroup() |> 
+  group_by(cycle, treatment, species) |> 
+  filter(logNum <= 5 | logNum >= 32 | (logNum >= 15 & logNum <= 20))
+
+beg <- clean_means |> 
+  filter(logNum <= 5) |> 
+  group_by(cycle, treatment, species) |> 
+  summarize(A_mean = mean(A_mean),
+            A_sd = mean(A_sd),
+            gsw_mean = mean(gsw_mean),
+            gsw_sd = mean(gsw_mean))
+
+mid <- clean_means |> 
+  filter(logNum >= 15 & logNum <= 20) |> 
+  group_by(cycle, treatment, species) |> 
+  summarize(A_mean = mean(A_mean),
+            A_sd = mean(A_sd),
+            gsw_mean = mean(gsw_mean),
+            gsw_sd = mean(gsw_mean))
+
+end <- clean_means |> 
+  filter(logNum >= 32) |> 
+  group_by(cycle, treatment, species) |> 
+  summarize(A_mean = mean(A_mean),
+            A_sd = mean(A_sd),
+            gsw_mean = mean(gsw_mean),
+            gsw_sd = mean(gsw_mean))
+
+
+beg_mid_end_joined <- 
+  merge(beg, mid, "species") |> 
+  merge(end, "species")
+
 
 
 
@@ -537,7 +593,7 @@ simpleDoubleBucketA <- aov(A_mean ~ treatment*species,
                            data = combinedCyclesData)
 summary(simpleDoubleBucketA)
 
-simpleDoubleBucketGSW <- aov(A_mean ~ treatment * species,
+simpleDoubleBucketGSW <- aov(gsw_mean ~ treatment * species,
                              data = combinedCyclesData)
 summary(simpleDoubleBucketGSW)
 
@@ -545,12 +601,12 @@ summary(simpleDoubleBucketGSW)
 
 
 # #the one that would tell when/if it reaches x% decrease ATTEMPT 1 ----
-getTimeDecrease <- adjusted_all |> 
-  group_by(species, treatment, cycle) %>%
-  arrange(logNum) %>%
-  mutate(aCheck = first(adjA) * 0.8, #0.8 = 20% decrease
-         gswCheck = first(adjGSW) * 0.8) |> 
-  mutate(isLessA = FALSE, isLessGSW = FALSE)  
+# getTimeDecrease <- adjusted_all |> 
+#   group_by(species, treatment, cycle) %>%
+#   arrange(logNum) %>%
+#   mutate(aCheck = first(adjA) * 0.8, #0.8 = 20% decrease
+#          gswCheck = first(adjGSW) * 0.8) |> 
+#   mutate(isLessA = FALSE, isLessGSW = FALSE)  
 #   loopFunction()
 #   #won't run because of pipe, but won't recognize variable if not piped
 #   #google search suggestion: run this as a function
@@ -593,36 +649,32 @@ getTimeDecreaseCol <- function(percent) {
   group_by(species, treatment, cycle) %>%
   arrange(logNum) %>%
   mutate(aCheck = adjA[1] * (1 - percent), #calculates x% left
-         gswCheck = adjGSW[1] * (1 - percent),
-         indexA = NA,
-         indexGSW = NA) 
+         gswCheck = adjGSW[1] * (1 - percent))
+         #indexA = NA,
+        # indexGSW = NA) 
 }
 decreaseData <- getTimeDecreaseCol(0.2)
 
 
 percentDecrease <- function(dataIn){
   dataIn |> 
-    group_by(species, treatment, cycle) |> 
+    group_by(species, treatment, cycle, replicate) |> 
     arrange(logNum) |> 
-    findIndexA() 
+    findIndexA() #|> 
     #findIndexGSW()
 }
-
 
 findIndexA <- function(dataIn){
   mutated = dataIn
   for(i in length(dataIn$cycle) - 2){
-    if(dataIn$adjA[i] < dataIn$aCheck[i]) {
-      if(dataIn$adjA[i+1] < dataIn$aCheck[i+1]){
-       if(dataIn$adjA[i + 2] < dataIn$aCheck[i + 2]){
+    if(dataIn$adjA[i] < dataIn$aCheck[i] & dataIn$adjA[i+1] < dataIn$aCheck[i+1] & dataIn$adjA[i + 2] < dataIn$aCheck[i + 2]) {
       mutate(mutated, indexA = i)
       return(mutated)
-      }
-     } 
-   }
+    } 
   }
-  return(mutated)
 }
+
+testFindA <- findIndexA(decreaseData)
 
 findIndexGSW <- function(dataIn){
   mutated = dataIn
@@ -642,7 +694,30 @@ testing <- percentDecrease(decreaseData)
 ###output = new data frame with species, treatment, cycle, when it hit OR NA
 
 
+##attempt 3 ----
+#these are the same as above
+getTimeDecreaseCol <- function(percent) {
+  adjusted_all |> 
+  group_by(species, treatment, cycle, replicate) %>%
+  arrange(logNum) %>%
+  mutate(aCheck = adjA[1] * (1 - percent), #calculates x% left
+         gswCheck = adjGSW[1] * (1 - percent),
+         indexA = NA,
+         indexGSW = NA) 
+}
+decreaseData <- getTimeDecreaseCol(0.2)
+
+filteredDecreaseA <- decreaseData |> 
+  ungroup() |> 
+  group_by(species, treatment, cycle, replicate) |> 
+  filter(adjA < aCheck) |> 
+  mutate(numLeftA = length(adjA)) |> 
+  filter(numLeftA > 3) |> 
+  arrange(logNum)
+
+
 ```
+
 
 
 ## by species
