@@ -288,25 +288,6 @@ clean_means <- data %>%
 
 #making rolled time series data frame for plotting
 #rolled average = plots the average of this and the next two (n=3), smooths curve
-rolled <- relativeAdjusted %>%
-  group_by(species, treatment, cycle, replicate) %>%
-  arrange(logNum) %>%
-  mutate(A_roll = rollmean(adjA, k = 3, align = "left", fill = NA),
-         gsw_roll = rollmean(adjGSW, k = 3, align = "left", fill = NA)) # -> rolled
-
-#and lastly, making an average of the rolled values for plotting
-#may decide later that any or all of these are not useful
-rolled_means <- rolled %>%
-  ungroup() %>%
-  group_by(species, logNum, treatment, cycle) %>%
-  summarize(A_mean = mean(A_roll),
-            A_sd = sd(A_roll),
-            gsw_mean = mean(gsw_roll),
-            gsw_sd = sd(gsw_roll)) #-> rolled_means
-
-##relative ver?
-#making rolled time series data frame for plotting
-#rolled average = plots the average of this and the next two (n=3), smooths curve
 rolled <- data %>%
   group_by(species, treatment, cycle, replicate) %>%
   arrange(logNum) %>%
@@ -323,7 +304,7 @@ rolled_means <- rolled %>%
             gsw_mean = mean(gsw_roll),
             gsw_sd = sd(gsw_roll)) #-> rolled_means
 
-
+#
 #Graphs ----
 
 #NEEDS TO ADJUST: 

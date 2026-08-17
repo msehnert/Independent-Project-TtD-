@@ -26,3 +26,14 @@ debugOut2 <- debugData |>
   group_by(species, cycle, treatment, replicate) 
 
 indexesOut <- 
+  
+  
+debugOut2 <- debugData |> 
+  mutate(test = NA) |> 
+  group_by(species, cycle, treatment, replicate) |> 
+  
+  
+  
+
+  
+ 
