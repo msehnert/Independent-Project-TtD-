@@ -1,0 +1,706 @@
+---
+title: "Independent Project Markdown"
+author: "Maggie and Kendal"
+date: "2026-07-20"
+output: html_document
+---
+
+# Project Overview: 
+
+The goal of this project is to address possible sampling gaps within the methods of the TEMPEST IV sampling campaign.
+
+In order to sample canopy data, branches need to be removed from the tree, re-cut in a bucket of saltwater, and brought to the IRGAs in the lab. There is an unavoidable time delay between when the sample is removed, when the sample has access to water, and when the sample begins measurement. We want to know whether any of these actions impacts the ability of the leaves on the sample branch to photosynthesize so that we can better understand the veg campaign data.  
+  
+Additionally, it is difficult to know (and therefore sample) exactly when the trees in the saltwater plot are actively uptaking saltwater, and what the direct effects of this uptake would be. However, by snipping a sample in a bucket of saltwater, we may be able to mimic this uptake.    
+
+This project investigates whether 1. the **action of snipping** a branch off the main stem 2. the **time delay** for that branch accessing water, and 3. the **type of water** the branch is in (i.e. freshwater versus saltwater) impact the photosynthesis of the three focal TEMPEST species (tulip poplar, red maple, and beech). 
+
+  
+Data collection is divided into two cycles:
+
+**Cycle A**  | **Cycle B**
+------------- | -------------
+Control *(attached to tree)* |Control *(attached to tree)*
+Bucket *(snipped in a bucket of freshwater, no time delay)* |Fresh *(snipped in a bucket of freshwater, ~1 min delay)*
+Detached *(snipped without providing any water source)* |Salt *(snipped in a bucket of saltwater, ~1 min delay)*
+
+Each cycle runs for 75 minutes, logging data every 120 seconds. Cycles where a treatment is applied log one reading before the treatment.  
+    
+    
+#STEPS: 
+##make some graphs of each individual relative data (this beech, etc) and the summarized relative data (all beech, etc)
+
+```{r setup, include=FALSE} 
+knitr::opts_chunk$set(echo = TRUE) #this is from original markdown doc
+```
+
+```{r loading packages, include = FALSE}
+library(lubridate)
+library(ggplot2)
+library(dplyr)
+library(tidyverse)
+library(zoo)
+```
+
+```{r Data read-in and cleaning, include = FALSE}
+
+#Metadata-based read-in
+data_dir <- "Data"
+metadata <- read.csv("TTD_metadata.csv", stringsAsFactors = FALSE)
+
+#need to look into what this one is doing specifically
+##guess: creating a list of csv files based on if it has ".csv" in the "data" files
+csv_list <- list.files(
+  path = data_dir,
+  pattern = "\\.csv$",
+  full.names = TRUE
+)
+
+cleanData <- function(dataSheet, IRGAName, cycleAorB, cycleType, spp, obsStart, obsEnd, file_name, replicate) {
+  dataSheet %>%
+    filter(between(obs, obsStart, obsEnd)) %>%
+    mutate(
+      logNum   = obs - (obsStart - 1),
+      cycle    = cycleAorB,
+      treatment = cycleType,
+      species  = spp,
+      File     = file_name,
+      IRGAName = IRGAName,
+      replicate = replicate
+    ) %>%
+    select(date, IRGAName, species, cycle, treatment, replicate, logNum, A, gsw, Ci)
+}
+
+#taking all data from metadata/csvs, cleaning data, returning as one data frame
+read_and_clean_all <- function(metadata, data_dir = "Data") {
+  metadata <- metadata %>%
+    mutate(File = as.character(File)) #taking file name, making String
+  #For each row in metadata, read, clean, and return a tibble
+  all_clean <- metadata %>%
+    pmap_dfr(function(Date, Instrument, Species, Treatment, Cycle, Replicate, Start, End, File, Notes) {
+      fullpath <- file.path(data_dir, File) # Build full file path
+      raw <- readr::read_csv(fullpath, show_col_types = FALSE)  # Read raw CSV
+      cleanData( #cleaning data to rename/only use needed cols
+        dataSheet  = raw,
+        IRGAName   = Instrument,  # use the metadata "Instrument" (PNNL/NoName/UT)
+        cycleAorB  = Cycle,       # use the metadata "Cycle" (A/B, NA = blank)
+        cycleType  = Treatment,   # use the metadata "Treatment" (Control, Fresh, Salt, etc)
+        spp        = Species,     # use the metadata "Species" (ACRU, FAGR, LITU)
+        obsStart   = Start,       # first log num
+        obsEnd     = End,         # last log num
+        file_name  = File,        # which .csv the data is from
+        replicate  = Replicate    # use the metadata "Replicate"
+      )
+    })
+  return(all_clean)
+}
+
+all_data <- read_and_clean_all(metadata, data_dir = "Data")
+glimpse(all_data)
+
+
+## K's additions!
+#quick look at blank data
+all_data %>%
+  filter(treatment == "Blank") %>%
+  pivot_longer(cols = c("A", "gsw"), 
+               names_to = "Type", 
+               values_to = "Value") %>%
+  ggplot() + geom_point(aes(logNum, Value)) + 
+  facet_grid(Type ~ IRGAName)
+
+#adjust based on blanks data
+blanks <- all_data |> 
+  group_by(IRGAName, treatment) |> 
+    filter(treatment == "Blank",
+           logNum > 3) |>
+  #this removes the major wiggles from the first few minutes
+      summarize(offsetA = mean(A),
+                errorA = sd(A),
+             offsetGSW = mean(gsw),
+             errorGSW = sd(gsw)) #-> blanks
+#blank correct the values
+corrected <- blanks |>
+  ungroup() |> 
+  select(IRGAName, offsetA, offsetGSW) |> 
+  full_join(all_data, by = "IRGAName") |> 
+  mutate(adjA = A - offsetA,
+         adjGSW = gsw - offsetGSW) %>% #now we can drop the rows that have the blank data, so we don't have to remove NA's later on
+  drop_na(cycle) #-> corrected
+
+
+#histograms to show where/if outliers are
+ggplot(corrected, aes(adjA, stat = "identity")) + 
+  geom_histogram() + facet_wrap(.~species)
+ggplot(corrected, aes(adjGSW, stat = "identity")) + 
+  geom_histogram() + facet_wrap(.~species)
+#based on these graphs A of 10 and gsw of 0.2 seem like reasonable cutoffs for all species
+
+#cleaning data step first (so we only have to do it once)
+data <- corrected %>%
+  filter(adjA <= 10,
+         adjGSW <= 0.2) #remove outliers
+  
+#calculate relative values based on initial data
+initials <- data %>%
+  group_by(species, treatment, cycle, replicate) %>%
+  arrange(logNum) %>%
+  slice(1:5) %>%
+    summarize(Ai = mean(adjA),
+            GSWi = mean(adjGSW))
+
+relative <- data %>%
+  left_join(initials, by = c("species", "treatment", "cycle", "replicate")) %>%
+  mutate(A_rel = adjA/Ai,
+         gsw_rel = adjGSW/GSWi)
+
+#RELATIVE = DATA FRAME WITH CLEANED, OUTLIER-LESS, RELATIVE DATA
+#INITIALS = DATA FRAME WITH INITIAL A/gsw VALUES
+
+#K note 8.16: this chunk is a good candidate for deleting
+#M note 8.17: deleted!
+```
+
+# Graphs
+ideas: 
+can i color code things more properly?
+how to make graphs more readable?
+
+## with K: 
+```{r all data graphs but with adjusted values USE THIS ONE!!, include = FALSE}
+###
+### K chunk from August 12th meeting
+###
+
+#making means data frame for plotting
+#this is making a mean/stdev for each cycle log 
+##aka averaging all ACRU fresh log 1s
+clean_means <- data %>%
+  group_by(species, logNum, treatment, cycle) %>%
+  summarize(A_mean = mean(adjA),
+            A_sd = sd(adjA),
+            gsw_mean = mean(adjGSW),
+            gsw_sd = sd(adjGSW)) |> 
+  ungroup() #-> clean_means
+
+
+#making rolled time series data frame for plotting
+#rolled average = plots the average of this and the next two (n=3), smooths curve
+rolled <- data %>%
+  group_by(species, treatment, cycle, replicate) %>%
+  arrange(logNum) %>%
+  mutate(A_roll = rollmean(adjA, k = 3, align = "left", fill = NA),
+         gsw_roll = rollmean(adjGSW, k = 3, align = "left", fill = NA)) # -> rolled
+
+#and lastly, making an average of the rolled values for plotting
+#may decide later that any or all of these are not useful
+rolled_means <- rolled %>%
+  ungroup() %>%
+  group_by(species, logNum, treatment, cycle) %>%
+  summarize(A_mean = mean(A_roll),
+            A_sd = sd(A_roll),
+            gsw_mean = mean(gsw_roll),
+            gsw_sd = sd(gsw_roll)) #-> rolled_means
+
+#
+#Graphs ----
+
+#NEEDS TO ADJUST: 
+##can i color-code the lines? (detached = red, control = green, bucket = cyan?, salt = yellow, fresh = blue)
+
+
+#ORIGINAL GRAPHS: BOTH CYCLES, A gsw SEPERATE----
+#A
+#Error bars:
+ggplot() + geom_line(data = rolled_means, aes(logNum, A_mean, color = treatment),
+                     linewidth = 1.25) + 
+  geom_point(data = clean_means, aes(logNum, A_mean, color = treatment), alpha = 0.5) + 
+  geom_errorbar(data = clean_means, aes(x = logNum, ymin = A_mean - A_sd, ymax = A_mean + A_sd,
+                                       color = treatment), alpha = 0.3) +
+  geom_hline(yintercept = 0, color = 'red') + #adds red line on 0
+  facet_grid(species ~ cycle, scales = "free_y") + theme_bw()
+
+#attempt to graph with ribbons instead of lines
+ggplot() + geom_line(data = rolled_means, aes(logNum, A_mean, color = treatment),
+                     linewidth = 1.25) + 
+  geom_point(data = clean_means, aes(logNum, A_mean, color = treatment), alpha = 0.5) + 
+  geom_ribbon(data = clean_means, aes(x = logNum, ymin = A_mean - A_sd, ymax = A_mean + A_sd,
+                                       color = treatment, fill = treatment), alpha = 0.15, color = NA) +
+  geom_hline(yintercept = 0, color = 'red') +
+  facet_grid(species ~ cycle, scales = "free_y") + theme_bw()  +
+  labs(x = "Log Number", y = "A") 
+
+
+#same as above, but with gsw
+#Error Bars: 
+ggplot() + geom_line(data = rolled_means, aes(logNum, gsw_mean, color = treatment),
+                     linewidth = 1.25) + 
+  geom_point(data = clean_means, aes(logNum, gsw_mean, color = treatment), alpha = 0.5) + 
+  geom_errorbar(data = clean_means, aes(x = logNum, ymin = gsw_mean - gsw_sd, ymax = gsw_mean + gsw_sd,
+                                       color = treatment), alpha = 0.3) +
+  geom_hline(yintercept = 0, color = 'red') + #adds red line on 0
+  facet_grid(species ~ cycle, scales = "free_y") + theme_bw() +
+  labs(x = "Log Number", y = "gsw") 
+
+#Shaded Reigon:
+ggplot() + geom_line(data = rolled_means, aes(logNum, gsw_mean, color = treatment),
+                     linewidth = 1.25) + 
+  geom_point(data = clean_means, aes(logNum, gsw_mean, color = treatment), alpha = 0.5) + 
+  geom_ribbon(data = clean_means, aes(x = logNum, ymin = gsw_mean - gsw_sd, ymax = gsw_mean + gsw_sd,
+                                      color = treatment, fill = treatment), alpha = 0.15, color = NA) +
+  geom_hline(yintercept = 0, color = 'red') + #adds red line on 0
+  facet_grid(species ~ cycle, scales = "free_y")  + theme_bw() + 
+  labs(x = "Log Number", y = "gsw") 
+#----
+
+
+
+ 
+
+#K skipped this
+# cleaned_all %>%
+#  filter(!is.na(cycle),
+#         replicate = 1) %>%
+# ggplot(aes(logNum, gsw, color = treatment)) +
+#   geom_point() + geom_line() + facet_grid(species ~ cycle, scales = "free_y") +
+#   ggtitle("Example Stomatal Conductance Panel")
+
+
+
+#graphs that could be helpful when doing a presentation/out of curiosity ----
+```
+
+```{r Combined Buckets Graphs}
+#Plotting controls and freshwater tests together
+clean_means_cb <- data %>%
+  group_by(species, logNum, treatment) %>%
+  filter(treatment != "Detached", treatment != "Salt") |> 
+  summarize(A_mean = mean(adjA),
+            A_sd = sd(adjA),
+            gsw_mean = mean(adjGSW),
+            gsw_sd = sd(adjGSW)) |> 
+  ungroup() |> 
+    mutate(across("treatment", str_replace, "Fresh", "1 Minute Delay"),
+         across("treatment", str_replace, "Bucket", "No Delay"))
+
+#combined the rolling means functions into one. saved time
+
+rolled_means_cb <- data |> 
+  ungroup() |>
+  group_by(treatment, species, logNum) |> 
+  filter(treatment != "Detached", treatment != "Salt") |> 
+  ungroup() |> 
+  group_by(species, treatment) |> 
+  mutate(A_roll = rollmean(adjA, k = 3, align = "left", fill = NA),
+         gsw_roll = rollmean(adjGSW, k = 3, align = "left", fill = NA)) |> 
+  ungroup() |> 
+  group_by(species, logNum, treatment) |> 
+  summarize(A_mean = mean(A_roll),
+            A_sd = sd(A_roll),
+            gsw_mean = mean(gsw_roll),
+            gsw_sd = mean(gsw_roll)) |> 
+  mutate(across("treatment", str_replace, "Fresh", "1 Minute Delay"),
+         across("treatment", str_replace, "Bucket", "No Delay"))
+
+
+#A
+ggplot() + geom_line(data = rolled_means_cb, aes(logNum, A_mean, color = treatment),
+                     linewidth = 1.25) + 
+  geom_point(data = clean_means_cb, aes(logNum, A_mean, color = treatment), alpha = 0.5) + 
+  geom_ribbon(data = clean_means_cb, aes(x = logNum, ymin = A_mean - A_sd, ymax = A_mean + A_sd,
+                                       color = treatment, fill = treatment), alpha = 0.15, color = NA) +
+  geom_hline(yintercept = 0, color = 'red') +
+  facet_grid(rows = "species", scales = "free_y") + 
+  theme_bw()
+  labs(x = "Log Number", y = "A") 
+
+#gsw
+ggplot() + geom_line(data = rolled_means_cb, aes(logNum, gsw_mean, color = treatment),
+                     linewidth = 1.25) + 
+  geom_point(data = clean_means_cb, aes(logNum, gsw_mean, color = treatment), alpha = 0.5) + 
+  geom_ribbon(data = clean_means_cb, aes(x = logNum, ymin = gsw_mean - gsw_sd, ymax = gsw_mean + gsw_sd,
+                                       color = treatment, fill = treatment), alpha = 0.15, color = NA) +
+  geom_hline(yintercept = 0, color = 'red') +
+  facet_grid(rows = "species", scales = "free_y") + theme_bw()  +
+  labs(x = "Log Number", y = "gsw") 
+
+
+#A and gsw on the same graph 
+
+#cb = combined buckets, wp = with pivot
+#HOW TO MAKE THIS WORK???? PIVOT DOESN'T DIFFERENTIATE BTWN MEAN AND SD
+rolled_means_cb_wp <- rolled_means_cb |> 
+  pivot_longer(cols = c("A_mean", "gsw_mean"),
+               names_to = "Type_mean", 
+               values_to = "Value_mean") |>
+    pivot_longer(cols = c("A_sd", "gsw_sd"), 
+               names_to = "Type_sd", 
+               values_to = "Value_sd") |> 
+   filter((Type_mean == "A_mean" & Type_sd == "A_sd") | (Type_mean == "gsw_mean" & Type_sd == "gsw_sd"))
+  
+  
+clean_means_cb_wp <- clean_means_cb |> 
+  pivot_longer(cols = c("A_mean", "gsw_mean"),
+               names_to = "Type_mean", 
+               values_to = "Value_mean") |>
+    pivot_longer(cols = c("A_sd", "gsw_sd"), 
+               names_to = "Type_sd", 
+               values_to = "Value_sd") |> 
+   filter((Type_mean == "A_mean" & Type_sd == "A_sd") | (Type_mean == "gsw_mean" & Type_sd == "gsw_sd"))
+
+
+
+ggplot() + geom_line(data = rolled_means_cb_wp, aes(x = logNum, y = Value_mean, color = treatment), 
+                     linewidth = 1.25) + 
+  geom_point(data = clean_means_cb_wp, aes(logNum, Value_mean, color = treatment), alpha = 0.5) + 
+  geom_ribbon(data = clean_means_cb_wp, aes(x = logNum, ymin = Value_mean - Value_sd, ymax = Value_mean + Value_sd,
+                                       color = treatment, fill = treatment), alpha = 0.15, color = NA) +
+  geom_hline(yintercept = 0, color = 'red') + #adds red line on 0
+  facet_grid(species ~ Type_mean, scales = "free", axes = "all_y") + theme_bw()
+
+             
+```
+
+
+
+```{r Salt and Detached Graphs}
+#sldt = salt detached (so its not "sd = standard deviation")
+clean_means_sldt <- data %>%
+  group_by(species, logNum, treatment) %>%
+  filter(treatment != "Fresh", treatment != "Bucket") |> 
+  summarize(A_mean = mean(adjA),
+            A_sd = sd(adjA),
+            gsw_mean = mean(adjGSW),
+            gsw_sd = sd(adjGSW)) |> 
+  ungroup() 
+
+
+rolled_means_sldt <- data |> 
+  ungroup() |>
+  group_by(treatment, species, logNum) |> 
+  filter(treatment != "Fresh", treatment != "Bucket") |> 
+  ungroup() |> 
+  group_by(species, treatment) |> 
+  mutate(A_roll = rollmean(adjA, k = 3, align = "left", fill = NA),
+         gsw_roll = rollmean(adjGSW, k = 3, align = "left", fill = NA)) |> 
+  ungroup() |> 
+  group_by(species, logNum, treatment) |> 
+  summarize(A_mean = mean(A_roll),
+            A_sd = sd(A_roll),
+            gsw_mean = mean(gsw_roll),
+            gsw_sd = mean(gsw_roll))
+
+
+ggplot() + geom_line(data = rolled_means_sldt, aes(logNum, A_mean, color = treatment),
+                     linewidth = 1.25) + 
+  geom_point(data = clean_means_sldt, aes(logNum, A_mean, color = treatment), alpha = 0.5) + 
+  geom_ribbon(data = clean_means_sldt, aes(x = logNum, ymin = A_mean - A_sd, ymax = A_mean + A_sd,
+                                       color = treatment, fill = treatment), alpha = 0.15, color = NA) +
+  geom_hline(yintercept = 0, color = 'red') +
+  facet_grid(rows = "species", scales = "free_y") + theme_bw()  +
+  labs(x = "Log Number", y = "A") 
+
+#gsw
+ggplot() + geom_line(data = rolled_means_sldt, aes(logNum, gsw_mean, color = treatment),
+                     linewidth = 1.25) + 
+  geom_point(data = clean_means_sldt, aes(logNum, gsw_mean, color = treatment), alpha = 0.5) + 
+  geom_ribbon(data = clean_means_sldt, aes(x = logNum, ymin = gsw_mean - gsw_sd, ymax = gsw_mean + gsw_sd,
+                                       color = treatment, fill = treatment), alpha = 0.15, color = NA) +
+  geom_hline(yintercept = 0, color = 'red') +
+  facet_grid(rows = "species", scales = "free_y") + theme_bw()  +
+  labs(x = "Log Number", y = "gsw") 
+```
+
+
+
+```{r experimenting}
+#bar graphs of beginning middle end HLAF DONE? ----
+
+begMidEnd <- clean_means |> 
+  ungroup() |> 
+  group_by(cycle, treatment, species) |> 
+  filter(logNum <= 5 | logNum >= 32 | (logNum >= 15 & logNum <= 20))
+
+beg <- clean_means |> 
+  filter(logNum <= 5) |> 
+  group_by(cycle, treatment, species) |> 
+  summarize(A_mean = mean(A_mean),
+            A_sd = mean(A_sd),
+            gsw_mean = mean(gsw_mean),
+            gsw_sd = mean(gsw_mean))
+
+mid <- clean_means |> 
+  filter(logNum >= 15 & logNum <= 20) |> 
+  group_by(cycle, treatment, species) |> 
+  summarize(A_mean = mean(A_mean),
+            A_sd = mean(A_sd),
+            gsw_mean = mean(gsw_mean),
+            gsw_sd = mean(gsw_mean))
+
+end <- clean_means |> 
+  filter(logNum >= 32) |> 
+  group_by(cycle, treatment, species) |> 
+  summarize(A_mean = mean(A_mean),
+            A_sd = mean(A_sd),
+            gsw_mean = mean(gsw_mean),
+            gsw_sd = mean(gsw_mean))
+
+
+beg_mid_end_joined <- 
+  merge(beg, mid, "species") |> 
+  merge(end, "species")
+```
+
+
+#Statistics
+```{r Statistics, echo = FALSE}
+
+#a simple test of bucket effect
+
+#isolate data for testing effect
+simple_bucket_test <-  data %>%
+  ungroup() %>%
+  group_by(treatment, species, replicate) %>%
+  filter(cycle == "A",
+         treatment != "Detached",
+         logNum < 26 & logNum > 14) %>%
+  summarize(A_mean = mean(A),
+            gsw_mean = mean(gsw)) #-> simple_bucket_test
+
+#Effect on photosynthetic rate
+simple_bucket1 <- aov(A_mean ~ treatment * species,
+                    data = simple_bucket_test) 
+summary(simple_bucket1)
+
+
+#Effect on stomatal conductance
+simple_bucket2 <- aov(gsw_mean ~ treatment * species,
+                    data = simple_bucket_test) 
+summary(simple_bucket2)
+
+
+
+#combining cylces to double the statistics
+combinedCyclesData <- data |> 
+  ungroup() |> 
+  mutate(across("treatment", str_replace, "Fresh", "Bucket")) |> 
+  group_by(treatment, species, replicate) |> 
+  filter(treatment != "Detached", treatment != "Salt",
+         logNum < 26 & logNum > 14) |> 
+  summarize(A_mean = mean(A),
+            gsw_mean = mean(gsw))
+
+simpleDoubleBucketA <- aov(A_mean ~ treatment*species, 
+                           data = combinedCyclesData)
+summary(simpleDoubleBucketA)
+
+simpleDoubleBucketGSW <- aov(gsw_mean ~ treatment * species,
+                             data = combinedCyclesData)
+summary(simpleDoubleBucketGSW)
+
+#hey m!
+#bring any other anova style tests of the effect of cutting into this section!
+
+
+```
+
+
+``` {r from K sort later}
+ggplot(data[data$species == "ACRU",], 
+       aes(logNum, A, color = as.factor(replicate))) + 
+  geom_point() + facet_wrap(.~treatment, scales = "free", nrow = 3)
+#ACRU assimilation is especially jumpy,
+#would benefit most from smoothing
+#first a little formatting of the data
+fplusb <- data %>%
+  ungroup() %>%
+  mutate(across("treatment", str_replace, "Bucket", "Fresh"))
+fplusb_rel <- relative %>%
+  ungroup() %>%
+  #filter(species == "ACRU" & treatment != "Bucket" & replicate != "1" | species %in% c("LITU", "FAGR")) %>%
+  mutate(across("treatment", str_replace, "Bucket", "Fresh")) %>%
+      #mutate(across("treatment", str_replace, "Fresh", "1 Minute Delay"),
+    #     across("treatment", str_replace, "Bucket", "No Delay")) %>%
+  group_by(species, treatment, replicate) |> 
+  arrange(logNum) |>
+  mutate(A_roll = rollmean(A_rel, k = 3, align = "left", fill = NA),
+         gsw_roll = rollmean(gsw_rel, k = 3, align = "left", fill = NA))
+fplusb_rel_means <- fplusb_rel |>
+  ungroup() |> 
+  group_by(species, logNum, treatment) |> 
+  summarize(A_mean = mean(A_roll),
+            A_sd = sd(A_roll),
+            gsw_mean = mean(gsw_roll),
+            gsw_sd = mean(gsw_roll))
+#A
+#very noisy data in Fresh ACRU
+ggplot(data = fplusb_rel_means) +
+  geom_line(aes(logNum, A_mean, color = treatment),
+            linewidth = 1.1) + 
+  geom_ribbon(aes(x = logNum,
+                  ymin = A_mean - A_sd,
+                  ymax = A_mean + A_sd,
+                  color = treatment, fill = treatment),
+              alpha = 0.15, color = NA) +
+  geom_hline(yintercept = 1, color = 'red', linestyle = 2) +
+  facet_grid(rows = "species", scales = "free_y") + theme_bw()  +
+  labs(x = "Log Number", y = "relative A") 
+#gsw
+ggplot(data = fplusb_rel_means) +
+  geom_line(aes(logNum, gsw_mean, color = treatment),
+            linewidth = 1.1) + 
+  geom_ribbon(aes(x = logNum,
+                  ymin = gsw_mean - gsw_sd,
+                  ymax = gsw_mean + gsw_sd,
+                  color = treatment, fill = treatment),
+              alpha = 0.15, color = NA) +
+  geom_hline(yintercept = 1, color = 'red', linestyle = 2) +
+  facet_grid(rows = "species", scales = "free_y") + theme_bw()  +
+  labs(x = "Log Number", y = "relative GSW") 
+```
+```{r Salt vs Dettached}
+clean_meansSaltDetached <- data %>%
+  group_by(species, logNum, treatment) %>%
+  filter(treatment != "Fresh", treatment != "Bucket") |> 
+  summarize(A_mean = mean(adjA),
+            A_sd = sd(adjA),
+            gsw_mean = mean(adjGSW),
+            gsw_sd = sd(adjGSW)) |> 
+  ungroup() 
+saltDetachedOnly <- data |> 
+  ungroup() |>
+  group_by(treatment, species, logNum) |> 
+  filter(treatment != "Fresh", treatment != "Bucket") |> 
+  ungroup() |> 
+  group_by(species, treatment) |> 
+  mutate(A_roll = rollmean(adjA, k = 3, align = "left", fill = NA),
+         gsw_roll = rollmean(adjGSW, k = 3, align = "left", fill = NA)) |> 
+  ungroup() |> 
+  group_by(species, logNum, treatment) |> 
+  summarize(A_mean = mean(A_roll),
+            A_sd = sd(A_roll),
+            gsw_mean = mean(gsw_roll),
+            gsw_sd = mean(gsw_roll))
+ggplot() + geom_line(data = saltDetachedOnly, aes(logNum, A_mean, color = treatment),
+                     linewidth = 1.25) + 
+  geom_point(data = clean_meansSaltDetached, aes(logNum, A_mean, color = treatment), alpha = 0.5) + 
+  geom_ribbon(data = clean_meansSaltDetached, aes(x = logNum, ymin = A_mean - A_sd, ymax = A_mean + A_sd,
+                                       color = treatment, fill = treatment), alpha = 0.15, color = NA) +
+  geom_hline(yintercept = 0, color = 'red') +
+  facet_grid(rows = "species", scales = "free_y") + theme_bw()  +
+  labs(x = "Log Number", y = "A") 
+#gsw
+ggplot() + geom_line(data = saltDetachedOnly, aes(logNum, gsw_mean, color = treatment),
+                     linewidth = 1.25) + 
+  geom_point(data = clean_meansSaltDetached, aes(logNum, gsw_mean, color = treatment), alpha = 0.5) + 
+  geom_ribbon(data = clean_meansSaltDetached, aes(x = logNum, ymin = gsw_mean - gsw_sd, ymax = gsw_mean + gsw_sd,
+                                       color = treatment, fill = treatment), alpha = 0.15, color = NA) +
+  geom_hline(yintercept = 0, color = 'red') +
+  facet_grid(rows = "species", scales = "free_y") + theme_bw()  +
+  labs(x = "Log Number", y = "gsw") 
+```
+
+```{r KM curve} 
+
+#K here, let's simplify, first let's make the check values and confirm that all looks good
+getTimeDecrease <- fplusb |> 
+  group_by(species, treatment, cycle, replicate) %>%
+  arrange(logNum) %>%
+  mutate(aCheck = first(adjA) * 0.8, #0.8 = 20% decrease
+         gswCheck = first(adjGSW) * 0.8) %>%
+  select(species, treatment, replicate, aCheck, gswCheck) %>%
+  distinct()
+
+#And now we can create a new column based on that value after we rejoin
+km_data <- fplusb %>%
+  left_join(getTimeDecrease, by = c("species", "treatment", "cycle", "replicate")) %>%
+  mutate(Astatus = if_else(adjA > aCheck, "happy", "sad"),
+        GSWstatus = if_else(adjGSW > gswCheck, "happy", "sad"),
+        km_status1 = case_when(Astatus == "happy" ~ 0,
+                               Astatus == "sad" ~ 1),
+        km_status2 = case_when(GSWstatus == "happy" ~ 0,
+                               GSWstatus == "sad" ~ 1))
+
+library(survival)
+library(survminer)
+library(ranger)
+library(ggfortify)
+library(MuMIn)
+
+km_data1 <- km_data %>%
+  filter(treatment %in% c("Control", "Fresh"))
+
+km_trt_fit <- survfit(Surv(logNum, km_status1) ~ treatment, data=km_data1)
+summary(km_trt_fit)
+p1 = autoplot(km_trt_fit) +
+  labs(x='Number of Logs',
+       y='Percent surviving (± 95%CI)',
+       color='Handling',
+       fill='Handling') + 
+    theme_bw() +
+    scale_color_manual(values=c('#2ca25f','#b30000')) +
+    scale_fill_manual(values=c('#2ca25f','#b30000')) + 
+  geom_hline(yintercept = 0.8, color = 'black')
+
+p1
+#frsh intercepts at 18, control at 25
+```
+
+```{r Tempest in a Bucket}
+km_data2 <- km_data %>%
+  filter(treatment %in% c("Fresh", "Salt"))
+
+km_trt_fit2 <- survfit(Surv(logNum, km_status1) ~ treatment, data=km_data2)
+summary(km_trt_fit2)
+p2 = autoplot(km_trt_fit2) +
+  labs(x='Number of Logs',
+       y='Percent surviving (± 95%CI)',
+       color='Handling',
+       fill='Handling') +
+  theme_bw() +
+  scale_color_manual(values=c('#2ca25f','#b30000')) +
+  scale_fill_manual(values=c('#2ca25f','#b30000')) + 
+    geom_hline(yintercept = 0.8, color = 'black')
+
+
+p2
+#salt intercepts at like. 13.2. ish.
+```
+```{r KM detached vs control? m testing}
+km_data3 <- km_data %>%
+  filter(treatment %in% c("Control", "Detached"))
+
+km_trt_fit3 <- survfit(Surv(logNum, km_status1) ~ treatment, data=km_data3)
+summary(km_trt_fit3)
+p3 = autoplot(km_trt_fit3) +
+  labs(x='Number of Logs',
+       y='Percent surviving (± 95%CI)',
+       color='Handling',
+       fill='Handling') + 
+    theme_bw() +
+    scale_color_manual(values=c('#2ca25f','#b30000')) +
+    scale_fill_manual(values=c('#2ca25f','#b30000')) + 
+  geom_hline(yintercept = 0.8, color = 'black')
+
+p3
+
+#detached intercept = 10.4?
+```
+
+```{r km what if i put everyone on it}
+
+km_trt_fit_ALL <- survfit(Surv(logNum, km_status1) ~ treatment, data=km_data)
+summary(km_trt_fit_ALL)
+pALL = autoplot(km_trt_fit_ALL) +
+  labs(x='Number of Logs',
+       y='Percent surviving (± 95%CI)',
+       color='Handling',
+       fill='Handling') + 
+    theme_bw() +
+    #scale_color_manual(values=c('#2ca25f','#b30000')) +
+    #scale_fill_manual(values=c('#2ca25f','#b30000')) + 
+  geom_hline(yintercept = 0.8, color = 'black')
+
+pALL
+
+```
