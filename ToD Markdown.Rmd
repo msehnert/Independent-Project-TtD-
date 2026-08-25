@@ -35,11 +35,21 @@ knitr::opts_chunk$set(echo = TRUE) #this is from original markdown doc
 ```
 
 ```{r loading packages, include = FALSE}
+#general
 library(lubridate)
 library(ggplot2)
 library(dplyr)
 library(tidyverse)
+
+#for rolled mean
 library(zoo)
+
+#for KM curve
+library(survival)
+library(survminer)
+library(ranger)
+library(ggfortify)
+library(MuMIn)
 ```
 
 ```{r Data read-in and cleaning, include = FALSE}
@@ -96,12 +106,12 @@ read_and_clean_all <- function(metadata, data_dir = "Data") {
 }
 
 all_data <- read_and_clean_all(metadata, data_dir = "Data")
-glimpse(cleaned_all)
+glimpse(all_data)
 
 
 ## K's additions!
 #quick look at blank data
-all_data %>%
+blanks_check <- all_data %>%
   filter(treatment == "Blank") %>%
   pivot_longer(cols = c("A", "gsw"), 
                names_to = "Type", 
@@ -161,6 +171,17 @@ relative <- data %>%
 #M note 8.17: deleted!
 ```
 
+``` {r Yanjun water use efficiency suggestion}
+
+water_use <- relative |> 
+  ungroup() |> 
+  group_by(species, treatment, cycle, replicate) |> 
+  arrange(logNum) |> 
+  mutate(iWUE = adjA/adjGSW)
+  
+
+```
+
 # Graphs
 ideas: 
 can i color code things more properly?
@@ -208,6 +229,18 @@ rolled_means <- rolled %>%
 #NEEDS TO ADJUST: 
 ##can i color-code the lines? (detached = red, control = green, bucket = cyan?, salt = yellow, fresh = blue)
 
+#colors = 
+#primary colors
+controlColor = "#00BA38"
+freshColor = "#619CFF"
+saltColor = "#F8766D"
+detachedColor = "#535C71"
+
+#backup colors
+noDelayColor = "#F5B700"
+delayColor = "#9861D4"
+
+
 
 #ORIGINAL GRAPHS: BOTH CYCLES, A gsw SEPERATE----
 #A
@@ -228,7 +261,9 @@ ggplot() + geom_line(data = rolled_means, aes(logNum, A_mean, color = treatment)
                                        color = treatment, fill = treatment), alpha = 0.15, color = NA) +
   geom_hline(yintercept = 0, color = 'red') +
   facet_grid(species ~ cycle, scales = "free_y") + theme_bw()  +
-  labs(x = "Log Number", y = "A") 
+  labs(x = "Log Number", y = "A") + 
+  scale_color_manual(values=c(delayColor, controlColor, detachedColor, freshColor, saltColor)) +
+  scale_fill_manual(values=c(delayColor, controlColor, detachedColor, freshColor, saltColor))
 
 
 #same as above, but with gsw
@@ -255,6 +290,37 @@ ggplot() + geom_line(data = rolled_means, aes(logNum, gsw_mean, color = treatmen
 
 
 
+##Re-labeled data
+
+present_labels_rolled_means <- rolled_means |>
+  ungroup() |> 
+  mutate(Time = logNum * 2,
+         Assimilation = A_mean,
+         Stomatal_Conductance = gsw_mean,
+         across("species", str_replace, "ACRU", "Red Maple"),
+         across("species", str_replace, "LITU", "Tulip Poplar"),
+         across("species", str_replace, "FAGR", "Beech")) |> 
+  group_by(species, treatment, logNum, cycle)
+ 
+present_labels_clean_means <- clean_means %>%
+ mutate(Time = logNum * 2,
+         Assimilation = A_mean,
+         Stomatal_Conductance = gsw_mean,
+         across("species", str_replace, "ACRU", "Red Maple"),
+         across("species", str_replace, "LITU", "Tulip Poplar"),
+         across("species", str_replace, "FAGR", "Beech")) |> 
+  group_by(species, treatment, logNum, cycle)
+
+ggplot() + geom_line(data = present_labels_rolled_means, aes(Time, A_mean, color = treatment),
+                     linewidth = 1.25) + 
+  geom_point(data = present_labels_clean_means, aes(Time, A_mean, color = treatment), alpha = 0.5) + 
+  geom_ribbon(data = present_labels_clean_means, aes(x = Time, ymin = A_mean - A_sd, ymax = A_mean + A_sd,
+                                       color = treatment, fill = treatment), alpha = 0.15, color = NA) +
+  geom_hline(yintercept = 0, color = 'red') +
+  facet_grid(species ~ cycle, scales = "free_y") + theme_bw()  +
+  labs(x = "Time", y = "Assimilation") + 
+  scale_color_manual(values=c(delayColor, controlColor, detachedColor, freshColor, saltColor)) +
+  scale_fill_manual(values=c(delayColor, controlColor, detachedColor, freshColor, saltColor))
  
 
 #K skipped this
@@ -265,9 +331,6 @@ ggplot() + geom_line(data = rolled_means, aes(logNum, gsw_mean, color = treatmen
 #   geom_point() + geom_line() + facet_grid(species ~ cycle, scales = "free_y") +
 #   ggtitle("Example Stomatal Conductance Panel")
 
-
-
-#graphs that could be helpful when doing a presentation/out of curiosity ----
 ```
 
 ```{r Combined Buckets Graphs}
@@ -304,28 +367,40 @@ rolled_means_cb <- data |>
 
 
 #A
-ggplot() + geom_line(data = rolled_means_combined_buckets, aes(logNum, A_mean, color = treatment),
-                     linewidth = 1.25) + 
-  geom_point(data = clean_means_combined_buckets, aes(logNum, A_mean, color = treatment), alpha = 0.5) + 
-  geom_ribbon(data = clean_means_combined_buckets, aes(x = logNum, ymin = A_mean - A_sd, ymax = A_mean + A_sd,
+delay_A_graph <- ggplot() + 
+  geom_ribbon(data = clean_means_cb, aes(x = logNum, ymin = A_mean - A_sd, ymax = A_mean + A_sd,
                                        color = treatment, fill = treatment), alpha = 0.15, color = NA) +
+  geom_line(data = rolled_means_cb, aes(logNum, A_mean, color = treatment),
+                     linewidth = 1.25) + 
+  geom_point(data = clean_means_cb, aes(logNum, A_mean, color = treatment), alpha = 0.5) + 
+  
   geom_hline(yintercept = 0, color = 'red') +
   facet_grid(rows = "species", scales = "free_y") + 
-  theme_bw()
-  labs(x = "Log Number", y = "A") 
+  theme_bw() + 
+  labs(x = "Log Number", y = "A") + 
+  scale_color_manual(values=c(noDelayColor, controlColor, delayColor, freshColor, saltColor)) +
+  scale_fill_manual(values=c(noDelayColor, controlColor, delayColor, freshColor, saltColor)) 
+ggsave(delay_A_graph, filename = "graphs/delay A graph.jpg")
 
 #gsw
-ggplot() + geom_line(data = rolled_means_combined_buckets, aes(logNum, gsw_mean, color = treatment),
+delay_gsw_graph <- ggplot() + geom_line(data = rolled_means_cb, aes(logNum, gsw_mean, color = treatment),
                      linewidth = 1.25) + 
-  geom_point(data = clean_means_combined_buckets, aes(logNum, gsw_mean, color = treatment), alpha = 0.5) + 
-  geom_ribbon(data = clean_means_combined_buckets, aes(x = logNum, ymin = gsw_mean - gsw_sd, ymax = gsw_mean + gsw_sd,
+  geom_point(data = clean_means_cb, aes(logNum, gsw_mean, color = treatment), alpha = 0.5) + 
+  geom_ribbon(data = clean_means_cb, aes(x = logNum, ymin = gsw_mean - gsw_sd, ymax = gsw_mean + gsw_sd,
                                        color = treatment, fill = treatment), alpha = 0.15, color = NA) +
   geom_hline(yintercept = 0, color = 'red') +
   facet_grid(rows = "species", scales = "free_y") + theme_bw()  +
-  labs(x = "Log Number", y = "gsw") 
+  labs(x = "Log Number", y = "gsw")  + 
+  scale_color_manual(values=c(noDelayColor, controlColor, delayColor, freshColor, saltColor)) +
+  scale_fill_manual(values=c(noDelayColor, controlColor, delayColor, freshColor, saltColor)) 
+ggsave(delay_gsw_graph, filename = "graphs/delay gsw graph.jpg")
 
 
-#A and gsw on the same graph 
+
+#making cleaner version to put in presentations
+
+
+#A and gsw on the same graph ---- 
 
 #cb = combined buckets, wp = with pivot
 #HOW TO MAKE THIS WORK???? PIVOT DOESN'T DIFFERENTIATE BTWN MEAN AND SD
@@ -356,9 +431,83 @@ ggplot() + geom_line(data = rolled_means_cb_wp, aes(x = logNum, y = Value_mean, 
   geom_ribbon(data = clean_means_cb_wp, aes(x = logNum, ymin = Value_mean - Value_sd, ymax = Value_mean + Value_sd,
                                        color = treatment, fill = treatment), alpha = 0.15, color = NA) +
   geom_hline(yintercept = 0, color = 'red') + #adds red line on 0
-  facet_grid(species ~ Type_mean, scales = "free", axes = "all_y") + theme_bw()
+  facet_wrap(species ~ Type_mean, scales = "free", axes = "all_y", nrow = 3) + theme_bw()
 
-             
+          
+
+#renaming to make pretty graphs
+   
+clean_means_cb_renamed <- data %>%
+  group_by(species, logNum, treatment) %>%
+  filter(treatment != "Detached", treatment != "Salt") |> 
+  summarize(A_mean = mean(adjA),
+            A_sd = sd(adjA),
+            gsw_mean = mean(adjGSW),
+            gsw_sd = sd(adjGSW)) |> 
+  ungroup() |> 
+    mutate(across("treatment", str_replace, "Fresh", "1 Minute Delay"),
+         across("treatment", str_replace, "Bucket", "No Delay"),
+         across("species", str_replace, "ACRU", "Red Maple"),
+         across("species", str_replace, "FAGR", "Beech"),
+         across("species", str_replace, "LITU", "Tulip Poplar"),
+         logNum = logNum *2)
+
+#combined the rolling means functions into one. saved time
+
+rolled_means_cb_renamed <- data |> 
+  ungroup() |>
+  group_by(treatment, species, logNum) |> 
+  filter(treatment != "Detached", treatment != "Salt") |> 
+  ungroup() |> 
+  group_by(species, treatment) |> 
+  mutate(A_roll = rollmean(adjA, k = 3, align = "left", fill = NA),
+         gsw_roll = rollmean(adjGSW, k = 3, align = "left", fill = NA)) |> 
+  ungroup() |> 
+  group_by(species, logNum, treatment) |> 
+  summarize(A_mean = mean(A_roll),
+            A_sd = sd(A_roll),
+            gsw_mean = mean(gsw_roll),
+            gsw_sd = mean(gsw_roll)) |> 
+  ungroup() |> 
+  mutate(across("treatment", str_replace, "Fresh", "1 Minute Delay"),
+         across("treatment", str_replace, "Bucket", "No Delay"),
+        across("species", str_replace, "ACRU", "Red Maple"),
+         across("species", str_replace, "FAGR", "Beech"),
+         across("species", str_replace, "LITU", "Tulip Poplar"),
+         logNum = logNum *2)
+  
+
+delay_A_graph_clean <- ggplot() + 
+  geom_ribbon(data = clean_means_cb_renamed, aes(x = logNum, ymin = A_mean - A_sd, ymax = A_mean + A_sd,
+                                       color = treatment, fill = treatment), alpha = 0.15, color = NA) +
+  geom_line(data = rolled_means_cb_renamed, aes(logNum, A_mean, color = treatment),
+                     linewidth = 1.25) + 
+  geom_point(data = clean_means_cb_renamed, aes(logNum, A_mean, color = treatment), alpha = 0.5) + 
+  geom_hline(yintercept = 0, color = 'red') +
+  facet_grid(rows = "species", scales = "free_y") + 
+  theme_bw() + 
+  labs(x = "Time", y = "Assimilation") + 
+  scale_color_manual(values=c(noDelayColor, controlColor, delayColor, freshColor, saltColor)) +
+  scale_fill_manual(values=c(noDelayColor, controlColor, delayColor, freshColor, saltColor)) 
+delay_A_graph_clean
+ggsave(delay_A_graph_clean, filename = "graphs/delay A graph cleaned.jpg")
+
+#gsw
+delay_gsw_graph_clean <- ggplot() + geom_line(data = rolled_means_cb_renamed, aes(logNum, gsw_mean, color = treatment),
+                     linewidth = 1.25) + 
+  geom_point(data = clean_means_cb_renamed, aes(logNum, gsw_mean, color = treatment), alpha = 0.5) + 
+  geom_ribbon(data = clean_means_cb_renamed, aes(x = logNum, ymin = gsw_mean - gsw_sd, ymax = gsw_mean + gsw_sd,
+                                       color = treatment, fill = treatment), alpha = 0.15, color = NA) +
+  geom_hline(yintercept = 0, color = 'red') +
+  facet_grid(rows = "species", scales = "free_y") + theme_bw()  +
+  labs(x = "Time", y = "Stomatal Conductance")  + 
+  scale_color_manual(values=c(noDelayColor, controlColor, delayColor, freshColor, saltColor)) +
+  scale_fill_manual(values=c(noDelayColor, controlColor, delayColor, freshColor, saltColor)) 
+delay_gsw_graph_clean
+ggsave(delay_gsw_graph_clean, filename = "graphs/delay gsw graph clean.jpg")
+
+
+
 ```
 
 
@@ -391,26 +540,241 @@ rolled_means_sldt <- data |>
             gsw_sd = mean(gsw_roll))
 
 
-ggplot() + geom_line(data = rolled_means_sldt, aes(logNum, A_mean, color = treatment),
+sldt_A_graph <- ggplot() + geom_line(data = rolled_means_sldt, aes(logNum, A_mean, color = treatment),
                      linewidth = 1.25) + 
   geom_point(data = clean_means_sldt, aes(logNum, A_mean, color = treatment), alpha = 0.5) + 
   geom_ribbon(data = clean_means_sldt, aes(x = logNum, ymin = A_mean - A_sd, ymax = A_mean + A_sd,
                                        color = treatment, fill = treatment), alpha = 0.15, color = NA) +
   geom_hline(yintercept = 0, color = 'red') +
   facet_grid(rows = "species", scales = "free_y") + theme_bw()  +
-  labs(x = "Log Number", y = "A") 
+  labs(x = "Log Number", y = "A") + 
+   scale_color_manual(values=c(controlColor, detachedColor, saltColor)) +
+  scale_fill_manual(values=c(controlColor, detachedColor, saltColor)) 
+sldt_A_graph
+ggsave(sldt_A_graph, filename = "graphs/salt detached a graph.jpg")
+
+  
 
 #gsw
-ggplot() + geom_line(data = saltDetachedOnly, aes(logNum, gsw_mean, color = treatment),
+sldt_gsw_graph <- ggplot() + geom_line(data = rolled_means_sldt, aes(logNum, gsw_mean, color = treatment),
                      linewidth = 1.25) + 
-  geom_point(data = clean_meansSaltDetached, aes(logNum, gsw_mean, color = treatment), alpha = 0.5) + 
-  geom_ribbon(data = clean_meansSaltDetached, aes(x = logNum, ymin = gsw_mean - gsw_sd, ymax = gsw_mean + gsw_sd,
+  geom_point(data = clean_means_sldt, aes(logNum, gsw_mean, color = treatment), alpha = 0.5) + 
+  geom_ribbon(data = clean_means_sldt, aes(x = logNum, ymin = gsw_mean - gsw_sd, ymax = gsw_mean + gsw_sd,
                                        color = treatment, fill = treatment), alpha = 0.15, color = NA) +
   geom_hline(yintercept = 0, color = 'red') +
   facet_grid(rows = "species", scales = "free_y") + theme_bw()  +
-  labs(x = "Log Number", y = "gsw") 
+  labs(x = "Log Number", y = "gsw") + 
+   scale_color_manual(values=c(controlColor, detachedColor, saltColor)) +
+  scale_fill_manual(values=c(controlColor, detachedColor, saltColor)) 
+
+ggsave(sldt_gsw_graph, filename = "graphs/salt detached gsw graph.jpg")
+
+
+clean_means_sldt_justLITU <- data %>%
+  group_by(species, logNum, treatment) %>%
+  filter(treatment != "Fresh", treatment != "Bucket", treatment != "control", species == "LITU") |> 
+  summarize(A_mean = mean(adjA),
+            A_sd = sd(adjA),
+            gsw_mean = mean(adjGSW),
+            gsw_sd = sd(adjGSW)) |> 
+  ungroup() 
+
+
+rolled_means_sldt_justLITU <- data |> 
+  ungroup() |>
+  group_by(treatment, species, logNum) |> 
+  filter(treatment != "Fresh", treatment != "Bucket", treatment != "control", species == "LITU") |> 
+  ungroup() |> 
+  group_by(treatment) |> 
+  mutate(A_roll = rollmean(adjA, k = 3, align = "left", fill = NA),
+         gsw_roll = rollmean(adjGSW, k = 3, align = "left", fill = NA)) |> 
+  ungroup() |> 
+  group_by(species, logNum, treatment) |> 
+  summarize(A_mean = mean(A_roll),
+            A_sd = sd(A_roll),
+            gsw_mean = mean(gsw_roll),
+            gsw_sd = mean(gsw_roll))
+
+
+sldtJUSTLITU_A_graph <- ggplot() + geom_line(data = rolled_means_sldt_justLITU, aes(logNum, A_mean, color = treatment),
+                     linewidth = 1.25) + 
+  geom_point(data = clean_means_sldt_justLITU, aes(logNum, A_mean, color = treatment), alpha = 0.5) + 
+  geom_ribbon(data = clean_means_sldt_justLITU, aes(x = logNum, ymin = A_mean - A_sd, ymax = A_mean + A_sd,
+                                       color = treatment, fill = treatment), alpha = 0.15, color = NA) +
+  geom_hline(yintercept = 0, color = 'red') +
+  facet_grid(rows = "species", scales = "free_y") + theme_bw()  +
+  labs(x = "Log Number", y = "A") + 
+   scale_color_manual(values=c(controlColor, detachedColor, saltColor)) +
+  scale_fill_manual(values=c(controlColor, detachedColor, saltColor)) 
+sldtJUSTLITU_A_graph
+ggsave(sldtJUSTLITU_A_graph, filename = "graphs/salt detached a graph.jpg")
+
+  
+
+#gsw
+sldtJUSTLITU_gsw_graph <- ggplot() + geom_line(data = rolled_means_sldt, aes(logNum, gsw_mean, color = treatment),
+                     linewidth = 1.25) + 
+  geom_point(data = clean_means_sldt, aes(logNum, gsw_mean, color = treatment), alpha = 0.5) + 
+  geom_ribbon(data = clean_means_sldt, aes(x = logNum, ymin = gsw_mean - gsw_sd, ymax = gsw_mean + gsw_sd,
+                                       color = treatment, fill = treatment), alpha = 0.15, color = NA) +
+  geom_hline(yintercept = 0, color = 'red') +
+  facet_grid(rows = "species", scales = "free_y") + theme_bw()  +
+  labs(x = "Log Number", y = "gsw") + 
+   scale_color_manual(values=c(controlColor, detachedColor, saltColor)) +
+  scale_fill_manual(values=c(controlColor, detachedColor, saltColor)) 
+
+ggsave(sldt_gsw_graph, filename = "graphs/salt detached gsw graph.jpg")
+
+
+
+
+
 ```
 
+```{r Salt, Fresh, and Detached Graphs}
+#sldt = salt detached (so its not "sd = standard deviation")
+clean_means_sldtfr <- data %>%
+  mutate(across("treatment", str_replace, "Bucket", "Fresh")) |>
+  group_by(species, logNum, treatment) %>%
+  summarize(A_mean = mean(adjA),
+            A_sd = sd(adjA),
+            gsw_mean = mean(adjGSW),
+            gsw_sd = sd(adjGSW)) |> 
+  ungroup() 
+
+
+rolled_means_sldtfr <- data |> 
+  ungroup() |>
+  mutate(across("treatment", str_replace, "Bucket", "Fresh")) |> 
+  group_by(treatment, species, logNum) |> 
+  ungroup() |> 
+  group_by(species, treatment) |> 
+  mutate(A_roll = rollmean(adjA, k = 3, align = "left", fill = NA),
+         gsw_roll = rollmean(adjGSW, k = 3, align = "left", fill = NA)) |> 
+  ungroup() |> 
+  group_by(species, logNum, treatment) |> 
+  summarize(A_mean = mean(A_roll),
+            A_sd = sd(A_roll),
+            gsw_mean = mean(gsw_roll),
+            gsw_sd = mean(gsw_roll))
+
+
+sldtfr_A_graph <- ggplot() + geom_line(data = rolled_means_sldtfr, aes(logNum, A_mean, color = treatment),
+                     linewidth = 1.25) + 
+  geom_point(data = clean_means_sldtfr, aes(logNum, A_mean, color = treatment), alpha = 0.5) + 
+  geom_ribbon(data = clean_means_sldtfr, aes(x = logNum, ymin = A_mean - A_sd, ymax = A_mean + A_sd,
+                                       color = treatment, fill = treatment), alpha = 0.15, color = NA) +
+  geom_hline(yintercept = 0, color = 'red') +
+  facet_grid(rows = "species", scales = "free_y") + theme_bw()  +
+  labs(x = "Log Number", y = "A") + 
+   scale_color_manual(values=c(controlColor, detachedColor, freshColor, saltColor)) +
+  scale_fill_manual(values=c(controlColor, detachedColor, freshColor, saltColor)) 
+sldtfr_A_graph
+ggsave(sldtfr_A_graph, filename = "graphs/salt detached fresh a graph.jpg")
+
+  
+
+#gsw
+sldtfr_gsw_graph <- ggplot() + geom_line(data = rolled_means_sldtfr, aes(logNum, gsw_mean, color = treatment),
+                     linewidth = 1.25) + 
+  geom_point(data = clean_means_sldtfr, aes(logNum, gsw_mean, color = treatment), alpha = 0.5) + 
+  geom_ribbon(data = clean_means_sldtfr, aes(x = logNum, ymin = gsw_mean - gsw_sd, ymax = gsw_mean + gsw_sd,
+                                       color = treatment, fill = treatment), alpha = 0.15, color = NA) +
+  geom_hline(yintercept = 0, color = 'red') +
+  facet_grid(rows = "species", scales = "free_y") + theme_bw()  +
+  labs(x = "Log Number", y = "gsw") + 
+   scale_color_manual(values=c(controlColor, detachedColor, freshColor, saltColor)) +
+  scale_fill_manual(values=c(controlColor, detachedColor, freshColor, saltColor)) 
+sldtfr_gsw_graph
+
+ggsave(sldtfr_gsw_graph, filename = "graphs/salt detached fresh gsw graph.jpg")
+
+
+
+
+#for presentation
+
+rolled_means_sldtfr_clean <- rolled_means_sldtfr |> 
+  ungroup() |> 
+  mutate(across("species", str_replace, "ACRU", "Red Maple"),
+         across("species", str_replace, "FAGR", "Beech"),
+         across("species", str_replace, "LITU", "Tulip Poplar"),
+         logNum = logNum *2)
+
+clean_means_sldtfr_clean <- clean_means_sldtfr |> 
+  ungroup() |> 
+   mutate(across("species", str_replace, "ACRU", "Red Maple"),
+         across("species", str_replace, "FAGR", "Beech"),
+         across("species", str_replace, "LITU", "Tulip Poplar"),
+         logNum = logNum *2)
+
+
+
+sldtfr_A_graph_clean <- ggplot() + geom_line(data = rolled_means_sldtfr_clean, aes(logNum, A_mean, color = treatment),
+                     linewidth = 1.25) + 
+  geom_point(data = clean_means_sldtfr_clean, aes(logNum, A_mean, color = treatment), alpha = 0.5) + 
+  geom_ribbon(data = clean_means_sldtfr_clean, aes(x = logNum, ymin = A_mean - A_sd, ymax = A_mean + A_sd,
+                                       color = treatment, fill = treatment), alpha = 0.15, color = NA) +
+  geom_hline(yintercept = 0, color = 'red') +
+  facet_grid(rows = "species", scales = "free_y") + theme_bw()  +
+  labs(x = "Time", y = "Assimilation") + 
+   scale_color_manual(values=c(controlColor, detachedColor, freshColor, saltColor)) +
+  scale_fill_manual(values=c(controlColor, detachedColor, freshColor, saltColor)) 
+sldtfr_A_graph_clean
+ggsave(sldtfr_A_graph_clean, filename = "graphs/clean sldtfr a graph.jpg")
+
+```
+
+
+``` {r Yanjun's iWUE suggestion graphs}
+
+clean_means_iWUE <- water_use %>%
+  group_by(species, logNum, treatment, cycle) %>%
+  summarize(A_mean = mean(adjA),
+            A_sd = sd(adjA),
+            gsw_mean = mean(adjGSW),
+            gsw_sd = sd(adjGSW),
+            iWUE_mean = mean(iWUE),
+            iWUE_sd = sd(iWUE)) |> 
+  ungroup() #-> clean_means
+
+
+#making rolled time series data frame for plotting
+#rolled average = plots the average of this and the next two (n=3), smooths curve
+rolled_iWUE <- water_use %>%
+  group_by(species, treatment, cycle, replicate) %>%
+  arrange(logNum) %>%
+  mutate(A_roll = rollmean(adjA, k = 3, align = "left", fill = NA),
+         gsw_roll = rollmean(adjGSW, k = 3, align = "left", fill = NA),
+         iWUE_roll = rollmean(iWUE, k = 3, align = "left", fill = NA)) # -> rolled
+
+#and lastly, making an average of the rolled values for plotting
+#may decide later that any or all of these are not useful
+rolled_means_iWUE <- rolled_iWUE %>%
+  ungroup() %>%
+  group_by(species, logNum, treatment, cycle) %>%
+  summarize(A_mean = mean(A_roll),
+            A_sd = sd(A_roll),
+            gsw_mean = mean(gsw_roll),
+            gsw_sd = sd(gsw_roll),
+            iWUE_mean = mean(iWUE),
+            iWUE_sd = sd(iWUE)) #-> rolled_means
+
+
+
+#OUTLIERS, mess with this later
+ggplot() + geom_line(data = rolled_means_iWUE, aes(logNum, iWUE_mean, color = treatment),
+                     linewidth = 1.25) + 
+  geom_point(data = clean_means_iWUE, aes(logNum, iWUE_mean, color = treatment), alpha = 0.5) + 
+  #geom_ribbon(data = clean_means_iWUE, aes(x = logNum, ymin = iWUE_mean - iWUE_sd, ymax = iWUE_mean + iWUE_sd,
+                                       #color = treatment, fill = treatment), alpha = 0.15, color = NA) +
+  geom_hline(yintercept = 0, color = 'red') +
+  facet_grid(species ~ cycle, scales = "free_y") + theme_bw()  +
+  labs(x = "Log Number", y = "A") + 
+  scale_color_manual(values=c(delayColor, controlColor, detachedColor, freshColor, saltColor)) +
+  scale_fill_manual(values=c(delayColor, controlColor, detachedColor, freshColor, saltColor))
+
+```
 
 
 ```{r experimenting}
@@ -497,6 +861,46 @@ summary(simpleDoubleBucketA)
 simpleDoubleBucketGSW <- aov(gsw_mean ~ treatment * species,
                              data = combinedCyclesData)
 summary(simpleDoubleBucketGSW)
+
+
+
+control_fresh_salt <- data |> 
+  ungroup() |> 
+  mutate(across("treatment", str_replace, "Fresh", "Bucket")) |> 
+  group_by(treatment, species, replicate) |> 
+  filter(treatment == c("Control", "Bucket", "Salt"),
+         logNum < 26 & logNum > 14) |> 
+  summarize(A_mean = mean(A),
+            gsw_mean = mean(gsw))
+  
+control_fresh_salt_stats_A <- aov(A_mean ~ treatment*species,
+                                data = control_fresh_salt)
+summary(control_fresh_salt_stats_A) #treatment is signif
+
+
+control_fresh_salt_stats_gsw <- aov(gsw_mean ~ treatment*species,
+                                data = control_fresh_salt)
+summary(control_fresh_salt_stats_gsw) #treatment is very significant, treatment:spp is signif
+
+
+
+salt_v_detached <- data |> 
+  ungroup() |> 
+  group_by(treatment, species, replicate) |> 
+  filter(treatment == c("Salt", "Detached"), 
+         logNum < 26 & logNum > 14) |> 
+  summarize(A_mean = mean(A), 
+            gsw_mean = mean(gsw))
+
+salt_v_detached_A <- aov(A_mean ~ treatment*species,
+                         data = salt_v_detached)
+summary(salt_v_detached_A) #treatment is alllmost significant
+
+salt_v_detached_gsw <- aov(gsw_mean ~ treatment*species,
+                         data = salt_v_detached)
+summary(salt_v_detached_gsw) #treatment IS significant!
+
+
 
 #hey m!
 #bring any other anova style tests of the effect of cutting into this section!
@@ -697,6 +1101,8 @@ saltDetachedOnly <- data |>
             A_sd = sd(A_roll),
             gsw_mean = mean(gsw_roll),
             gsw_sd = mean(gsw_roll))
+
+
 ggplot() + geom_line(data = saltDetachedOnly, aes(logNum, A_mean, color = treatment),
                      linewidth = 1.25) + 
   geom_point(data = clean_meansSaltDetached, aes(logNum, A_mean, color = treatment), alpha = 0.5) + 
@@ -737,11 +1143,6 @@ km_data <- fplusb %>%
         km_status2 = case_when(GSWstatus == "happy" ~ 0,
                                GSWstatus == "sad" ~ 1))
 
-library(survival)
-library(survminer)
-library(ranger)
-library(ggfortify)
-library(MuMIn)
 
 km_data1 <- km_data %>%
   filter(treatment %in% c("Control", "Fresh"))
@@ -756,7 +1157,7 @@ p1 = autoplot(km_trt_fit) +
     theme_bw() +
     scale_color_manual(values=c('#2ca25f','#b30000')) +
     scale_fill_manual(values=c('#2ca25f','#b30000')) + 
-  geom_hline(yintercept = 0.8, color = 'black')
+  geom_hline(yintercept = 1, color = 'black')
 
 p1
 #frsh intercepts at 18, control at 25
@@ -796,7 +1197,7 @@ p3 = autoplot(km_trt_fit3) +
     theme_bw() +
     scale_color_manual(values=c('#2ca25f','#b30000')) +
     scale_fill_manual(values=c('#2ca25f','#b30000')) + 
-  geom_hline(yintercept = 0.8, color = 'black')
+  geom_hline(yintercept = 1, color = 'black')
 
 p3
 
@@ -813,10 +1214,13 @@ pALL = autoplot(km_trt_fit_ALL) +
        color='Handling',
        fill='Handling') + 
     theme_bw() +
-    #scale_color_manual(values=c('#2ca25f','#b30000')) +
-    #scale_fill_manual(values=c('#2ca25f','#b30000')) + 
-  geom_hline(yintercept = 0.8, color = 'black')
+   scale_color_manual(values=c(controlColor, detachedColor, freshColor, saltColor)) +
+   scale_fill_manual(values=c(controlColor, detachedColor, freshColor, saltColor)) +
+  geom_hline(yintercept = 1, color = 'black')
 
 pALL
+ggsave(pALL, filename = "graphs/KM curve ALL.jpg")
+
+##control = green, fresh = blue, salt = red, detached = grey or purple?
 
 ```
