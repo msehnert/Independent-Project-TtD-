@@ -640,7 +640,10 @@ clean_means_sldtfr <- data %>%
             A_sd = sd(adjA),
             gsw_mean = mean(adjGSW),
             gsw_sd = sd(adjGSW)) |> 
-  ungroup() 
+  ungroup() |> 
+  mutate(across("species", str_replace, "ACRU", "Red Maple"),
+         across("species", str_replace, "LITU", "Tulip Poplar"),
+         across("species", str_replace, "FAGR", "Beech"))
 
 
 rolled_means_sldtfr <- data |> 
@@ -656,7 +659,11 @@ rolled_means_sldtfr <- data |>
   summarize(A_mean = mean(A_roll),
             A_sd = sd(A_roll),
             gsw_mean = mean(gsw_roll),
-            gsw_sd = mean(gsw_roll))
+            gsw_sd = mean(gsw_roll)) |> 
+  ungroup() |> 
+  mutate(across("species", str_replace, "ACRU", "Red Maple"),
+         across("species", str_replace, "LITU", "Tulip Poplar"),
+         across("species", str_replace, "FAGR", "Beech"))
 
 
 sldtfr_A_graph <- ggplot() + geom_line(data = rolled_means_sldtfr, aes(logNum, A_mean, color = treatment),
@@ -682,12 +689,12 @@ sldtfr_gsw_graph <- ggplot() + geom_line(data = rolled_means_sldtfr, aes(logNum,
                                        color = treatment, fill = treatment), alpha = 0.15, color = NA) +
   geom_hline(yintercept = 0, color = 'red') +
   facet_grid(rows = "species", scales = "free_y") + theme_bw()  +
-  labs(x = "Log Number", y = "gsw") + 
+  labs(x = "Time", y = "Stomatal Conductance") + 
    scale_color_manual(values=c(controlColor, detachedColor, freshColor, saltColor)) +
   scale_fill_manual(values=c(controlColor, detachedColor, freshColor, saltColor)) 
 sldtfr_gsw_graph
 
-ggsave(sldtfr_gsw_graph, filename = "graphs/salt detached fresh gsw graph.jpg")
+ggsave(sldtfr_gsw_graph, filename = "graphs/slfrdt gsw graph clean.jpg")
 
 
 
@@ -726,7 +733,7 @@ ggsave(sldtfr_A_graph_clean, filename = "graphs/clean sldtfr a graph.jpg")
 ```
 
 
-``` {r Yanjun's iWUE suggestion graphs}
+``` {r Yanjuns iWUE suggestion graphs}
 
 clean_means_iWUE <- water_use %>%
   group_by(species, logNum, treatment, cycle) %>%
@@ -950,76 +957,77 @@ summary(salt_v_detached_gsw) #treatment IS significant!
 
 #%decrease attempt 2 ----
 
-getTimeDecreaseCol <- function(percent) {
-  adjusted_all |> 
-  group_by(species, treatment, cycle) %>%
-  arrange(logNum) %>%
-  mutate(aCheck = adjA[1] * (1 - percent), #calculates x% left
-         gswCheck = adjGSW[1] * (1 - percent))
-         #indexA = NA,
-        # indexGSW = NA) 
-}
-decreaseData <- getTimeDecreaseCol(0.2)
-
-
-percentDecrease <- function(dataIn){
-  dataIn |> 
-    group_by(species, treatment, cycle, replicate) |> 
-    arrange(logNum) |> 
-    findIndexA() #|> 
-    #findIndexGSW()
-}
-
-findIndexA <- function(dataIn){
-  mutated = dataIn
-  for(i in length(dataIn$cycle) - 2){
-    if(dataIn$adjA[i] < dataIn$aCheck[i] & dataIn$adjA[i+1] < dataIn$aCheck[i+1] & dataIn$adjA[i + 2] < dataIn$aCheck[i + 2]) {
-      mutate(mutated, indexA = i)
-      return(mutated)
-    } 
-  }
-}
-
-testFindA <- findIndexA(decreaseData)
-
-findIndexGSW <- function(dataIn){
-  mutated = dataIn
-  for(i in length(dataIn$cycle) - 2){
-    if(dataIn$adjGSW[i] < dataIn$gswCheck[i] & dataIn$adjGSW[i+1] < dataIn$gswCheck[i+1] & dataIn$adjGSW[i + 2] < dataIn$gswCheck[i + 2]) {
-      mutate(mutated, indexGSW = i)
-      return(mutated)
-    } 
-  }
-}
-
-
-testing <- percentDecrease(decreaseData)
+# getTimeDecreaseCol <- function(percent) {
+#   adjusted_all |> 
+#   group_by(species, treatment, cycle) %>%
+#   arrange(logNum) %>%
+#   mutate(aCheck = adjA[1] * (1 - percent), #calculates x% left
+#          gswCheck = adjGSW[1] * (1 - percent))
+#          #indexA = NA,
+#         # indexGSW = NA) 
+# }
+# 
+# # decreaseData <- getTimeDecreaseCol(0.2)
+# 
+# 
+# percentDecrease <- function(dataIn){
+#   dataIn |> 
+#     group_by(species, treatment, cycle, replicate) |> 
+#     arrange(logNum) |> 
+#     findIndexA() #|> 
+#     #findIndexGSW()
+# }
+# 
+# findIndexA <- function(dataIn){
+#   mutated = dataIn
+#   for(i in length(dataIn$cycle) - 2){
+#     if(dataIn$adjA[i] < dataIn$aCheck[i] & dataIn$adjA[i+1] < dataIn$aCheck[i+1] & dataIn$adjA[i + 2] < dataIn$aCheck[i + 2]) {
+#       mutate(mutated, indexA = i)
+#       return(mutated)
+#     } 
+#   }
+# }
+# 
+# testFindA <- findIndexA(decreaseData)
+# 
+# findIndexGSW <- function(dataIn){
+#   mutated = dataIn
+#   for(i in length(dataIn$cycle) - 2){
+#     if(dataIn$adjGSW[i] < dataIn$gswCheck[i] & dataIn$adjGSW[i+1] < dataIn$gswCheck[i+1] & dataIn$adjGSW[i + 2] < dataIn$gswCheck[i + 2]) {
+#       mutate(mutated, indexGSW = i)
+#       return(mutated)
+#     } 
+#   }
+# }
+# 
+# 
+# testing <- percentDecrease(decreaseData)
 
 
 ##idea: run through, figure out if it hits that mark
 ###output = new data frame with species, treatment, cycle, when it hit OR NA
 
 
-##attempt 3 ----
-#these are the same as above
-getTimeDecreaseCol <- function(percent) {
-  adjusted_all |> 
-  group_by(species, treatment, cycle, replicate) %>%
-  arrange(logNum) %>%
-  mutate(aCheck = adjA[1] * (1 - percent), #calculates x% left
-         gswCheck = adjGSW[1] * (1 - percent),
-         indexA = NA,
-         indexGSW = NA) 
-}
-decreaseData <- getTimeDecreaseCol(0.2)
-
-filteredDecreaseA <- decreaseData |> 
-  ungroup() |> 
-  group_by(species, treatment, cycle, replicate) |> 
-  filter(adjA < aCheck) |> 
-  mutate(numLeftA = length(adjA)) |> 
-  filter(numLeftA > 3) |> 
-  arrange(logNum)
+# ##attempt 3 ----
+# #these are the same as above
+# getTimeDecreaseCol <- function(percent) {
+#   adjusted_all |> 
+#   group_by(species, treatment, cycle, replicate) %>%
+#   arrange(logNum) %>%
+#   mutate(aCheck = adjA[1] * (1 - percent), #calculates x% left
+#          gswCheck = adjGSW[1] * (1 - percent),
+#          indexA = NA,
+#          indexGSW = NA) 
+# }
+# decreaseData <- getTimeDecreaseCol(0.2)
+# 
+# filteredDecreaseA <- decreaseData |> 
+#   ungroup() |> 
+#   group_by(species, treatment, cycle, replicate) |> 
+#   filter(adjA < aCheck) |> 
+#   mutate(numLeftA = length(adjA)) |> 
+#   filter(numLeftA > 3) |> 
+#   arrange(logNum)
 
 
 ```
